@@ -109,13 +109,17 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
       ...summary,
     }, 201);
   } catch (error) {
-    await Promise.all([
-      locals.runtime.env.BUCKET.delete(r2Key),
-      locals.db.delete(rowEntries).where(eq(rowEntries.spreadsheetId, spreadsheetId)),
-      locals.db.delete(spreadsheetColumns).where(eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
-      locals.db.delete(spreadsheetEnrichments).where(eq(spreadsheetEnrichments.spreadsheetId, spreadsheetId)),
-      locals.db.delete(spreadsheets).where(eq(spreadsheets.id, spreadsheetId)),
-    ]);
+    try {
+      await Promise.all([
+        locals.runtime.env.BUCKET.delete(r2Key),
+        locals.db.delete(rowEntries).where(eq(rowEntries.spreadsheetId, spreadsheetId)),
+        locals.db.delete(spreadsheetColumns).where(eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
+        locals.db.delete(spreadsheetEnrichments).where(eq(spreadsheetEnrichments.spreadsheetId, spreadsheetId)),
+        locals.db.delete(spreadsheets).where(eq(spreadsheets.id, spreadsheetId)),
+      ]);
+    } catch {
+      // Ignore cleanup failures so the upload endpoint still returns the original error response.
+    }
 
     return json(
       {
