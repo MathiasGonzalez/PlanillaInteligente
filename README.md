@@ -3,4 +3,4 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
 
 ## Scripts
 
-- `npm run test:local`: ejecuta typecheck, validación de Astro y build local.
+- `npm run test:local`: instala dependencias del lockfile y luego ejecuta typecheck, validación de Astro y build local.
