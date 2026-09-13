@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
-import { rowEntries, spreadsheetColumns, spreadsheets } from '../../db/schema';
+import { rowEntries, spreadsheetColumns, spreadsheetEnrichments, spreadsheets } from '../../db/schema';
 import { parseWorkbookIntoDatabase } from '../../lib/excel-parser';
 import { scheduleSpreadsheetEnrichment } from '../../lib/spreadsheet-enrichment';
+import { json } from '../../lib/api-response';
 import { verifyTurnstileToken } from '../../lib/turnstile';
 
 const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -11,15 +12,6 @@ async function sha256Hex(buffer: ArrayBuffer) {
   const digest = await crypto.subtle.digest('SHA-256', buffer);
 
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-    },
-  });
 }
 
 export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
@@ -121,6 +113,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
       locals.runtime.env.BUCKET.delete(r2Key),
       locals.db.delete(rowEntries).where(eq(rowEntries.spreadsheetId, spreadsheetId)),
       locals.db.delete(spreadsheetColumns).where(eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
+      locals.db.delete(spreadsheetEnrichments).where(eq(spreadsheetEnrichments.spreadsheetId, spreadsheetId)),
       locals.db.delete(spreadsheets).where(eq(spreadsheets.id, spreadsheetId)),
     ]);
 

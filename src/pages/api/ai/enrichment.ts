@@ -1,14 +1,6 @@
 import type { APIRoute } from 'astro';
+import { json } from '../../../lib/api-response';
 import { getSpreadsheetEnrichment, runSpreadsheetEnrichment, scheduleSpreadsheetEnrichment } from '../../../lib/spreadsheet-enrichment';
-
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-    },
-  });
-}
 
 export const GET: APIRoute = async ({ url, locals }) => {
   if (!locals.user || !locals.tenantId) {
