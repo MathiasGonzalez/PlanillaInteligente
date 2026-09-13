@@ -2,6 +2,7 @@ import XlsxPopulate from 'xlsx-populate';
 import { spreadsheetColumns, rowEntries } from '../db/schema';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
 import type * as schema from '../db/schema';
+import { toMatrix } from './spreadsheet-matrix';
 
 export type SpreadsheetColumnType = 'string' | 'number' | 'boolean' | 'date' | 'json';
 
@@ -109,18 +110,6 @@ function inferColumnType(samples: unknown[]): SpreadsheetColumnType {
   }
 
   return 'string';
-}
-
-function toMatrix(value: unknown): unknown[][] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  if (value.length === 0) {
-    return [];
-  }
-
-  return Array.isArray(value[0]) ? (value as unknown[][]) : [value as unknown[]];
 }
 
 export async function parseWorkbookIntoDatabase({

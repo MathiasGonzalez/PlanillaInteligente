@@ -3,6 +3,7 @@ import { and, asc, eq } from 'drizzle-orm';
 import { rowEntries, spreadsheetColumns, spreadsheets } from '../db/schema';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
 import type * as schema from '../db/schema';
+import { toMatrix } from './spreadsheet-matrix';
 
 interface ExportSpreadsheetOptions {
   db: DrizzleD1Database<typeof schema>;
@@ -28,18 +29,6 @@ function toWorksheetValue(value: unknown) {
   }
 
   return value as string | number | boolean | Date;
-}
-
-function toMatrix(value: unknown): unknown[][] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  if (value.length === 0) {
-    return [];
-  }
-
-  return Array.isArray(value[0]) ? (value as unknown[][]) : [value as unknown[]];
 }
 
 async function toUint8Array(value: Uint8Array | ArrayBuffer | Blob) {

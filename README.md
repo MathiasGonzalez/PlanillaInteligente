@@ -10,7 +10,7 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
 - GitHub Actions despliega a Cloudflare Pages según la rama:
   - `main` o `master` -> `production`
   - `dev` o `develop` -> `development`
-- Workflow: `/home/runner/work/PlanillaInteligente/PlanillaInteligente/.github/workflows/deploy-cloudflare-pages.yml`
+- Workflow: `.github/workflows/deploy-cloudflare-pages.yml`
 - Secretos a definir más adelante en GitHub:
   - `CLOUDFLARE_API_TOKEN`
   - `CLOUDFLARE_ACCOUNT_ID`

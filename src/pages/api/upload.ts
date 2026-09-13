@@ -64,24 +64,24 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
   const spreadsheetId = crypto.randomUUID();
   const r2Key = `${runtimeLocals.tenantId}/spreadsheets/${spreadsheetId}.xlsx`;
 
-  await runtimeLocals.runtime.env.BUCKET.put(r2Key, arrayBuffer, {
-    httpMetadata: {
-      contentType: uploadedFile.type || XLSX_CONTENT_TYPE,
-    },
-  });
-
-  await runtimeLocals.db.insert(spreadsheets).values({
-    id: spreadsheetId,
-    tenantId: runtimeLocals.tenantId,
-    uploadedByUserId: runtimeLocals.user.id,
-    name: uploadedFile.name.replace(/\.xlsx$/i, ''),
-    originalFilename: uploadedFile.name,
-    r2Key,
-    sourceType: 'excel',
-    checksum,
-  });
-
   try {
+    await runtimeLocals.runtime.env.BUCKET.put(r2Key, arrayBuffer, {
+      httpMetadata: {
+        contentType: uploadedFile.type || XLSX_CONTENT_TYPE,
+      },
+    });
+
+    await runtimeLocals.db.insert(spreadsheets).values({
+      id: spreadsheetId,
+      tenantId: runtimeLocals.tenantId,
+      uploadedByUserId: runtimeLocals.user.id,
+      name: uploadedFile.name.replace(/\.xlsx$/i, ''),
+      originalFilename: uploadedFile.name,
+      r2Key,
+      sourceType: 'excel',
+      checksum,
+    });
+
     const summary = await parseWorkbookIntoDatabase({
       arrayBuffer,
       db: runtimeLocals.db,
