@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { rowEntries, spreadsheetColumns, spreadsheets } from '../../db/schema';
 import { parseWorkbookIntoDatabase } from '../../lib/excel-parser';
+import { scheduleSpreadsheetEnrichment } from '../../lib/spreadsheet-enrichment';
 import { verifyTurnstileToken } from '../../lib/turnstile';
 
 const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -92,10 +93,27 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
       })
       .where(eq(spreadsheets.id, spreadsheetId));
 
+    const enrichment = await scheduleSpreadsheetEnrichment({
+      db: locals.db,
+      env: locals.runtime.env,
+      tenantId: locals.tenantId,
+      spreadsheetId,
+      requestedByUserId: locals.user.id,
+      triggeredBy: 'upload',
+    });
+
     return json({
       spreadsheetId,
       tenantId: locals.tenantId,
       r2Key,
+      enrichment: {
+        status: enrichment.status,
+        mode: enrichment.mode,
+        generatedBy: enrichment.generatedBy,
+        model: enrichment.model,
+        fallbackUsed: enrichment.fallbackUsed,
+        errorMessage: enrichment.errorMessage,
+      },
       ...summary,
     }, 201);
   } catch (error) {

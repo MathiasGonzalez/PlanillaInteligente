@@ -19,3 +19,17 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
 - Secretos sensibles de Cloudflare/Runtime a cargar fuera del repo:
   - `GOOGLE_CLIENT_SECRET`
   - `TURNSTILE_SECRET_KEY`
+
+## AI enrichment
+
+- El upload ahora dispara un enriquecimiento post-proceso sobre el esquema detectado de la planilla.
+- Bindings/vars de Cloudflare usados para esta etapa:
+  - `AI` (Workers AI binding)
+  - `ENRICHMENT_QUEUE` (Cloudflare Queue producer para procesamiento asíncrono)
+  - `WORKERS_AI_MODEL`
+  - `AI_GATEWAY_ID`
+- Si `ENRICHMENT_QUEUE` no está configurada o falla, el enriquecimiento cae en modo inline.
+- Si `AI` no está configurado o la inferencia falla, se guarda una configuración heurística multi-tenant como fallback.
+- Endpoint manual para reintentar o consultar la configuración IA:
+  - `GET /api/ai/enrichment?spreadsheetId=...`
+  - `POST /api/ai/enrichment` con `{ "spreadsheetId": "...", "mode": "inline|queue" }`

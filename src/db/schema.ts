@@ -1,4 +1,10 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import type {
+  SpreadsheetEnrichmentConfiguration,
+  SpreadsheetEnrichmentProvider,
+  SpreadsheetEnrichmentStatus,
+  SpreadsheetTriggerSource,
+} from '../lib/spreadsheet-enrichment-types';
 
 const timestamps = {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
@@ -114,4 +120,22 @@ export const rowEntries = sqliteTable('row_entries', {
 }, (table) => ({
   tenantSpreadsheetIndex: index('row_entries_tenant_sheet_idx').on(table.tenantId, table.spreadsheetId),
   rowOrderIndex: uniqueIndex('row_entries_sheet_row_idx').on(table.spreadsheetId, table.rowIndex),
+}));
+
+export const spreadsheetEnrichments = sqliteTable('spreadsheet_enrichments', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  spreadsheetId: text('spreadsheet_id').notNull().references(() => spreadsheets.id, { onDelete: 'cascade' }),
+  status: text('status').$type<SpreadsheetEnrichmentStatus>().notNull().default('pending'),
+  provider: text('provider').$type<SpreadsheetEnrichmentProvider>().notNull().default('heuristic'),
+  model: text('model'),
+  config: text('config', { mode: 'json' }).$type<SpreadsheetEnrichmentConfiguration | null>(),
+  errorMessage: text('error_message'),
+  lastTriggeredBy: text('last_triggered_by').$type<SpreadsheetTriggerSource>().notNull().default('upload'),
+  lastEnqueuedAt: integer('last_enqueued_at', { mode: 'timestamp_ms' }),
+  lastProcessedAt: integer('last_processed_at', { mode: 'timestamp_ms' }),
+  ...timestamps,
+}, (table) => ({
+  uniqueSpreadsheetIndex: uniqueIndex('spreadsheet_enrichments_tenant_sheet_idx').on(table.tenantId, table.spreadsheetId),
+  statusIndex: index('spreadsheet_enrichments_status_idx').on(table.status),
 }));

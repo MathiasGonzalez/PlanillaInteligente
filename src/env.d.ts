@@ -1,5 +1,13 @@
 /// <reference types="astro/client" />
 
+interface WorkersAiBinding {
+  run(model: string, input: unknown, options?: unknown): Promise<unknown>;
+}
+
+interface QueueBinding<T = unknown> {
+  send(message: T): Promise<void>;
+}
+
 interface Env {
   DB: D1Database;
   BUCKET: R2Bucket;
@@ -7,6 +15,10 @@ interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   TURNSTILE_SECRET_KEY: string;
+  WORKERS_AI_MODEL?: string;
+  AI_GATEWAY_ID?: string;
+  AI?: WorkersAiBinding;
+  ENRICHMENT_QUEUE?: QueueBinding<import('./lib/spreadsheet-enrichment-types').SpreadsheetEnrichmentMessage>;
 }
 
 declare namespace App {

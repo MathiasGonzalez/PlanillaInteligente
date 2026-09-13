@@ -5,6 +5,11 @@ pages_build_output_dir = "./dist"
 
 [vars]
 GOOGLE_CLIENT_ID = ""
+WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AI_GATEWAY_ID = ""
+
+[ai]
+binding = "AI"
 
 [[d1_databases]]
 binding = "DB"
@@ -18,3 +23,7 @@ id = "replace-with-kv-namespace-id"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "planilla-inteligente-assets"
+
+[[queues.producers]]
+binding = "ENRICHMENT_QUEUE"
+queue = "planilla-inteligente-enrichment"
