@@ -1,11 +1,8 @@
 import type { APIRoute } from 'astro';
 import { exportSpreadsheetFromDatabase } from '../../lib/excel-exporter';
-import type { RuntimeLocals } from '../../types/runtime';
 
 export const GET: APIRoute = async ({ url, locals }) => {
-  const runtimeLocals = locals as RuntimeLocals;
-
-  if (!runtimeLocals.user || !runtimeLocals.tenantId) {
+  if (!locals.user || !locals.tenantId) {
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -16,14 +13,13 @@ export const GET: APIRoute = async ({ url, locals }) => {
 
   try {
     const exportResult = await exportSpreadsheetFromDatabase({
-      db: runtimeLocals.db,
-      tenantId: runtimeLocals.tenantId,
+      db: locals.db,
+      tenantId: locals.tenantId,
       spreadsheetId,
-      bucket: runtimeLocals.runtime.env.BUCKET,
+      bucket: locals.runtime.env.BUCKET,
     });
-    const responseBody = exportResult.bytes.slice().buffer as ArrayBuffer;
 
-    return new Response(responseBody, {
+    return new Response(exportResult.bytes as unknown as BodyInit, {
       status: 200,
       headers: {
         'content-type': exportResult.contentType,

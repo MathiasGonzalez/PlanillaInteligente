@@ -4,7 +4,6 @@ import { and, eq, gt } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { memberships, sessions, users } from './db/schema';
 import * as schema from './db/schema';
-import type { RuntimeLocals } from './types/runtime';
 
 export interface SessionUser {
   id: string;
@@ -56,13 +55,12 @@ function clearKnownSessionCookies(cookies: AstroCookies) {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, cookies, url } = context;
-  const runtimeLocals = locals as RuntimeLocals;
-  const db = drizzle(runtimeLocals.runtime.env.DB, { schema });
+  const db = drizzle(locals.runtime.env.DB, { schema });
 
-  runtimeLocals.db = db;
-  runtimeLocals.user = null;
-  runtimeLocals.session = null;
-  runtimeLocals.tenantId = null;
+  locals.db = db;
+  locals.user = null;
+  locals.session = null;
+  locals.tenantId = null;
 
   const sessionToken = getSessionToken(cookies);
 
@@ -75,12 +73,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   }
 
   const cacheKey = `session:${sessionToken}`;
-  const cachedSession = await runtimeLocals.runtime.env.SESSION_KV.get<SessionCacheEntry>(cacheKey, 'json');
+  const cachedSession = await locals.runtime.env.SESSION_KV.get<SessionCacheEntry>(cacheKey, 'json');
 
   if (cachedSession && new Date(cachedSession.session.expiresAt) > new Date()) {
-    runtimeLocals.user = cachedSession.user;
-    runtimeLocals.session = cachedSession.session;
-    runtimeLocals.tenantId = cachedSession.tenantId;
+    locals.user = cachedSession.user;
+    locals.session = cachedSession.session;
+    locals.tenantId = cachedSession.tenantId;
 
     return next();
   }
@@ -118,7 +116,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect('/login');
   }
 
-  runtimeLocals.user = {
+  locals.user = {
     id: record.userId,
     email: record.email,
     name: record.name,
@@ -126,21 +124,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
     defaultOrganizationId: record.defaultOrganizationId,
     role: record.role,
   };
-  runtimeLocals.session = {
+  locals.session = {
     id: record.sessionId,
     userId: record.sessionUserId,
     sessionToken: record.sessionToken,
     activeOrganizationId: record.activeOrganizationId,
     expiresAt: record.expiresAt.toISOString(),
   };
-  runtimeLocals.tenantId = record.activeOrganizationId;
+  locals.tenantId = record.activeOrganizationId;
 
-  await runtimeLocals.runtime.env.SESSION_KV.put(
+  await locals.runtime.env.SESSION_KV.put(
     cacheKey,
     JSON.stringify({
-      tenantId: runtimeLocals.tenantId,
-      user: runtimeLocals.user,
-      session: runtimeLocals.session,
+      tenantId: locals.tenantId,
+      user: locals.user,
+      session: locals.session,
     }),
     {
       expirationTtl: Math.max(60, Math.floor((record.expiresAt.getTime() - Date.now()) / 1000)),

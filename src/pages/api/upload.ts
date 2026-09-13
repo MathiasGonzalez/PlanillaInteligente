@@ -3,7 +3,6 @@ import { eq } from 'drizzle-orm';
 import { rowEntries, spreadsheetColumns, spreadsheets } from '../../db/schema';
 import { parseWorkbookIntoDatabase } from '../../lib/excel-parser';
 import { verifyTurnstileToken } from '../../lib/turnstile';
-import type { RuntimeLocals } from '../../types/runtime';
 
 const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -23,9 +22,7 @@ function json(data: unknown, status = 200) {
 }
 
 export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
-  const runtimeLocals = locals as RuntimeLocals;
-
-  if (!runtimeLocals.user || !runtimeLocals.tenantId) {
+  if (!locals.user || !locals.tenantId) {
     return json({ error: 'Unauthorized' }, 401);
   }
 
@@ -35,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
 
   const verification = await verifyTurnstileToken({
     token: turnstileToken,
-    secretKey: runtimeLocals.runtime.env.TURNSTILE_SECRET_KEY,
+    secretKey: locals.runtime.env.TURNSTILE_SECRET_KEY,
     remoteIp: clientAddress,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -60,19 +57,19 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
 
   const checksum = await sha256Hex(arrayBuffer);
   const spreadsheetId = crypto.randomUUID();
-  const r2Key = `${runtimeLocals.tenantId}/spreadsheets/${spreadsheetId}.xlsx`;
+  const r2Key = `${locals.tenantId}/spreadsheets/${spreadsheetId}.xlsx`;
 
   try {
-    await runtimeLocals.runtime.env.BUCKET.put(r2Key, arrayBuffer, {
+    await locals.runtime.env.BUCKET.put(r2Key, arrayBuffer, {
       httpMetadata: {
         contentType: uploadedFile.type || XLSX_CONTENT_TYPE,
       },
     });
 
-    await runtimeLocals.db.insert(spreadsheets).values({
+    await locals.db.insert(spreadsheets).values({
       id: spreadsheetId,
-      tenantId: runtimeLocals.tenantId,
-      uploadedByUserId: runtimeLocals.user.id,
+      tenantId: locals.tenantId,
+      uploadedByUserId: locals.user.id,
       name: uploadedFile.name.replace(/\.xlsx$/i, ''),
       originalFilename: uploadedFile.name,
       r2Key,
@@ -82,12 +79,12 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
 
     const summary = await parseWorkbookIntoDatabase({
       arrayBuffer,
-      db: runtimeLocals.db,
-      tenantId: runtimeLocals.tenantId,
+      db: locals.db,
+      tenantId: locals.tenantId,
       spreadsheetId,
     });
 
-    await runtimeLocals.db
+    await locals.db
       .update(spreadsheets)
       .set({
         sheetName: summary.sheetName,
@@ -97,16 +94,16 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
 
     return json({
       spreadsheetId,
-      tenantId: runtimeLocals.tenantId,
+      tenantId: locals.tenantId,
       r2Key,
       ...summary,
     }, 201);
   } catch (error) {
     await Promise.all([
-      runtimeLocals.runtime.env.BUCKET.delete(r2Key),
-      runtimeLocals.db.delete(rowEntries).where(eq(rowEntries.spreadsheetId, spreadsheetId)),
-      runtimeLocals.db.delete(spreadsheetColumns).where(eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
-      runtimeLocals.db.delete(spreadsheets).where(eq(spreadsheets.id, spreadsheetId)),
+      locals.runtime.env.BUCKET.delete(r2Key),
+      locals.db.delete(rowEntries).where(eq(rowEntries.spreadsheetId, spreadsheetId)),
+      locals.db.delete(spreadsheetColumns).where(eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
+      locals.db.delete(spreadsheets).where(eq(spreadsheets.id, spreadsheetId)),
     ]);
 
     return json(
