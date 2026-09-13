@@ -3,11 +3,9 @@ import { eq } from 'drizzle-orm';
 import { rowEntries, spreadsheetColumns, spreadsheets } from '../../db/schema';
 import { parseWorkbookIntoDatabase } from '../../lib/excel-parser';
 import { verifyTurnstileToken } from '../../lib/turnstile';
+import type { RuntimeLocals } from '../../types/runtime';
 
 const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-type RuntimeLocals = App.Locals & {
-  runtime: { env: Env };
-};
 
 async function sha256Hex(buffer: ArrayBuffer) {
   const digest = await crypto.subtle.digest('SHA-256', buffer);

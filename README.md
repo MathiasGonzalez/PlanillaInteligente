@@ -16,3 +16,6 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
   - `CLOUDFLARE_ACCOUNT_ID`
   - `CLOUDFLARE_PAGES_PROJECT_NAME_PROD`
   - `CLOUDFLARE_PAGES_PROJECT_NAME_DEV`
+- Secretos sensibles de Cloudflare/Runtime a cargar fuera del repo:
+  - `GOOGLE_CLIENT_SECRET`
+  - `TURNSTILE_SECRET_KEY`

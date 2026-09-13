@@ -2,6 +2,7 @@ declare module 'xlsx-populate' {
   export interface Cell {
     value(): unknown;
     value(nextValue: unknown): Cell;
+    value(nextValue: unknown[][]): Cell;
   }
 
   export interface Range {

@@ -4,6 +4,7 @@ import { and, eq, gt } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import { memberships, sessions, users } from './db/schema';
 import * as schema from './db/schema';
+import type { RuntimeLocals } from './types/runtime';
 
 export interface SessionUser {
   id: string;
@@ -27,10 +28,6 @@ interface SessionCacheEntry {
   user: SessionUser;
   session: UserSession;
 }
-
-type RuntimeLocals = App.Locals & {
-  runtime: { env: Env };
-};
 
 const PUBLIC_PATH_PREFIXES = ['/login', '/api/auth', '/favicon', '/_astro'];
 const PUBLIC_PATHS = new Set(['/']);

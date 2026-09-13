@@ -1,9 +1,6 @@
 import type { APIRoute } from 'astro';
 import { exportSpreadsheetFromDatabase } from '../../lib/excel-exporter';
-
-type RuntimeLocals = App.Locals & {
-  runtime: { env: Env };
-};
+import type { RuntimeLocals } from '../../types/runtime';
 
 export const GET: APIRoute = async ({ url, locals }) => {
   const runtimeLocals = locals as RuntimeLocals;
