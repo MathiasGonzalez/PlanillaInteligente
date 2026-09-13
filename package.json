@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "astro check",
+    "test:local": "npm run typecheck && npm run check && npx astro build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
