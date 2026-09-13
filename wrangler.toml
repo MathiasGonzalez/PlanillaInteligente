@@ -27,3 +27,8 @@ bucket_name = "planilla-inteligente-assets"
 [[queues.producers]]
 binding = "ENRICHMENT_QUEUE"
 queue = "planilla-inteligente-enrichment"
+
+[[queues.consumers]]
+queue = "planilla-inteligente-enrichment"
+max_batch_size = 10
+max_retries = 3

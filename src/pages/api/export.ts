@@ -1,6 +1,13 @@
 import type { APIRoute } from 'astro';
 import { exportSpreadsheetFromDatabase } from '../../lib/excel-exporter';
 
+function buildContentDisposition(filename: string) {
+  const fallback = filename.replace(/["\r\n]/g, '_') || 'spreadsheet.xlsx';
+  const encoded = encodeURIComponent(filename || 'spreadsheet.xlsx');
+
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 export const GET: APIRoute = async ({ url, locals }) => {
   if (!locals.user || !locals.tenantId) {
     return new Response('Unauthorized', { status: 401 });
@@ -23,7 +30,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
       status: 200,
       headers: {
         'content-type': exportResult.contentType,
-        'content-disposition': `attachment; filename="${exportResult.filename}"`,
+        'content-disposition': buildContentDisposition(exportResult.filename),
       },
     });
   } catch (error) {

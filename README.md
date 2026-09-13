@@ -33,3 +33,5 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
 - Endpoint manual para reintentar o consultar la configuración IA:
   - `GET /api/ai/enrichment?spreadsheetId=...`
   - `POST /api/ai/enrichment` con `{ "spreadsheetId": "...", "mode": "inline|queue" }`
+
+- Queue consumer handler: `src/queue.ts`
