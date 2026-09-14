@@ -115,9 +115,9 @@ AI_GATEWAY_ID = ""
 ## 4. Flujo típico de despliegue
 En producción, el flujo esperable es:
 
-1. el código se publica con GitHub Actions o con `wrangler deploy`
-2. Cloudflare crea/actualiza el Worker/Pages project
-3. el Worker tiene acceso a D1, KV, R2, Queue y AI por bindings
+1. el código se publica con GitHub Actions o con `wrangler pages deploy ./dist`
+2. Cloudflare crea/actualiza el proyecto de Pages y asegura que la build de Astro se sirva desde `./dist`
+3. la app tiene acceso a D1, KV, R2, Queue y AI por bindings
 4. cada request usa esos bindings para operar
 5. la sesión y la data se persisten en la infraestructura Cloudflare
 
@@ -126,7 +126,7 @@ El sistema ya está diseñado para tolerar la ausencia de algunos recursos:
 
 - si `ENRICHMENT_QUEUE` no existe, la app usa procesamiento inline
 - si `AI` no existe o falla, usa heurística local
-- si `SESSION_KV` no está disponible, la app puede seguir con D1, aunque con menos caché
+- si `SESSION_KV` no está disponible, la app sigue funcionando sin cache de sesión; el middleware valida la presencia del binding antes de leer o guardar en KV
 
 Esto hace que la app sea más robusta y facilite pruebas y migraciones.
 

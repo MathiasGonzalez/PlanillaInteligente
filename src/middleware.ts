@@ -72,8 +72,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect('/login');
   }
 
+  const sessionKv = locals.runtime.env.SESSION_KV;
   const cacheKey = `session:${sessionToken}`;
-  const cachedSession = await locals.runtime.env.SESSION_KV.get<SessionCacheEntry>(cacheKey, 'json');
+  const cachedSession = sessionKv
+    ? await sessionKv.get<SessionCacheEntry>(cacheKey, 'json')
+    : null;
 
   if (cachedSession && new Date(cachedSession.session.expiresAt) > new Date()) {
     locals.user = cachedSession.user;
@@ -133,17 +136,19 @@ export const onRequest = defineMiddleware(async (context, next) => {
   };
   locals.tenantId = record.activeOrganizationId;
 
-  await locals.runtime.env.SESSION_KV.put(
-    cacheKey,
-    JSON.stringify({
-      tenantId: locals.tenantId,
-      user: locals.user,
-      session: locals.session,
-    }),
-    {
-      expirationTtl: Math.max(60, Math.floor((record.expiresAt.getTime() - Date.now()) / 1000)),
-    },
-  );
+  if (sessionKv) {
+    await sessionKv.put(
+      cacheKey,
+      JSON.stringify({
+        tenantId: locals.tenantId,
+        user: locals.user,
+        session: locals.session,
+      }),
+      {
+        expirationTtl: Math.max(60, Math.floor((record.expiresAt.getTime() - Date.now()) / 1000)),
+      },
+    );
+  }
 
   return next();
 });

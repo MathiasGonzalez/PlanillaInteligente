@@ -54,11 +54,13 @@ Luego revisar y completar `wrangler.toml` con:
 - nombre del bucket R2
 - nombre de la queue
 
-Y finalmente levantar:
+Para este proyecto, la ejecución local de la runtime de Cloudflare debe seguir el modelo de Pages, no el de un Worker suelto. La forma recomendada es:
 
 ```bash
-npx wrangler dev
+npx wrangler pages dev ./dist
 ```
+
+Esto refleja mejor el despliegue real del repositorio, que usa `pages_build_output_dir = "./dist"` y el workflow de Pages.
 
 ## 5. Cómo simular la IA sin Workers AI
 La app ya tiene un fallback robusto:
