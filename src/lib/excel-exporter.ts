@@ -31,9 +31,9 @@ function toWorksheetValue(value: unknown) {
   return value as string | number | boolean | Date;
 }
 
-async function toUint8Array(value: Uint8Array | ArrayBuffer | Blob) {
+async function toUint8Array(value: Uint8Array | ArrayBuffer | Blob): Promise<Uint8Array<ArrayBuffer>> {
   if (value instanceof Uint8Array) {
-    return value;
+    return new Uint8Array(value);
   }
 
   if (value instanceof Blob) {
