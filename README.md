@@ -21,6 +21,16 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
   - `GOOGLE_CLIENT_SECRET`
   - `TURNSTILE_SECRET_KEY`
 
+## Setup local
+
+- Documentación previa de arranque: `docs/SETUP_LOCAL.md`
+- El documento explica la validación local sin crear recursos en Cloudflare y la ruta para activar D1/KV/R2/Queue cuando se confirme el entorno real.
+
+## Deploy en Cloudflare
+
+- Arquitectura y vinculación de servicios: `docs/DEPLOY_CLOUDFLARE.md`
+- Explica cómo queda desplegada la app en Cloudflare y qué bindings usa en producción.
+
 ## AI enrichment
 
 - El upload ahora dispara un enriquecimiento post-proceso sobre el esquema detectado de la planilla.
