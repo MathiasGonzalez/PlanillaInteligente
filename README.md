@@ -11,6 +11,7 @@ PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y
   - `main` o `master` -> `production`
   - `dev` o `develop` -> `development`
 - Workflow: `.github/workflows/deploy-cloudflare-pages.yml`
+- El workflow valida antes de desplegar que los secretos requeridos de Cloudflare estén presentes.
 - Secretos a definir más adelante en GitHub:
   - `CLOUDFLARE_API_TOKEN`
   - `CLOUDFLARE_ACCOUNT_ID`
