@@ -1,0 +1,36 @@
+name = "planilla-inteligente"
+compatibility_date = "2026-09-13"
+workers_dev = true
+pages_build_output_dir = "./dist"
+
+[vars]
+GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_SECRET = ""
+TURNSTILE_SECRET_KEY = ""
+WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AI_GATEWAY_ID = ""
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "planilla-inteligente"
+database_id = "replace-with-d1-database-id"
+
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "replace-with-kv-namespace-id"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "planilla-inteligente-assets"
+
+[[queues.producers]]
+binding = "ENRICHMENT_QUEUE"
+queue = "planilla-inteligente-enrichment"
+
+[[queues.consumers]]
+queue = "planilla-inteligente-enrichment"
+max_batch_size = 10
+max_retries = 3
