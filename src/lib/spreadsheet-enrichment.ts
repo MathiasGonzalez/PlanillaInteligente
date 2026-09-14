@@ -19,6 +19,7 @@ import {
 const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct';
 const DEFAULT_TITLE_SUFFIX = 'Workspace';
 const DEFAULT_SUMMARY = 'Configuración base generada a partir del esquema de la planilla.';
+const AI_REDACTED_VALUE = '[REDACTED]';
 const SENSITIVE_PATTERN = /(password|secret|token|api[_ -]?key|clave|dni|rut|cuit|ssn|card|tarjeta)/i;
 const SEMANTIC_PATTERNS: Array<{ semanticType: SpreadsheetSemanticType; pattern: RegExp }> = [
   { semanticType: 'email', pattern: /(email|correo|mail)/i },
@@ -124,11 +125,29 @@ function summarizeValue(value: unknown) {
   return JSON.stringify(value);
 }
 
-function getSampleValues(sampleRows: Record<string, unknown>[], key: string) {
+function getSampleValues(sampleRows: Record<string, unknown>[], key: string, redact = false) {
   return sampleRows
-    .map((row) => summarizeValue(row[key]))
+    .map((row) => {
+      const value = summarizeValue(row[key]);
+      if (value === null) {
+        return null;
+      }
+
+      return redact ? AI_REDACTED_VALUE : value;
+    })
     .filter((value): value is string | number | boolean => value !== null)
     .slice(0, 5);
+}
+
+function redactSampleRowsForAi(sampleRows: Record<string, unknown>[], sensitiveKeys: Set<string>) {
+  return sampleRows.slice(0, 5).map((row) =>
+    Object.fromEntries(
+      Object.entries(row).map(([key, value]) => [
+        key,
+        sensitiveKeys.has(key) && value !== null && value !== undefined && value !== '' ? AI_REDACTED_VALUE : value,
+      ]),
+    ),
+  );
 }
 
 function isEmailValue(value: string) {
@@ -518,6 +537,12 @@ function normalizeAiConfiguration(
 }
 
 function buildAiPrompt(context: SpreadsheetContext, heuristic: SpreadsheetEnrichmentConfiguration) {
+  const sensitiveKeys = new Set(
+    heuristic.columns
+      .filter((column) => column.sensitive || column.semanticType === 'sensitive' || SENSITIVE_PATTERN.test(column.key))
+      .map((column) => column.key),
+  );
+
   return {
     spreadsheet: {
       name: context.name,
@@ -528,9 +553,9 @@ function buildAiPrompt(context: SpreadsheetContext, heuristic: SpreadsheetEnrich
       label: column.label,
       dataType: column.dataType,
       required: column.required,
-      sampleValues: getSampleValues(context.sampleRows, column.key),
+      sampleValues: getSampleValues(context.sampleRows, column.key, sensitiveKeys.has(column.key)),
     })),
-    sampleRows: context.sampleRows.slice(0, 5),
+    sampleRows: redactSampleRowsForAi(context.sampleRows, sensitiveKeys),
     currentHeuristic: heuristic,
   };
 }

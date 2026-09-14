@@ -5,6 +5,8 @@ pages_build_output_dir = "./dist"
 
 [vars]
 GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_SECRET = ""
+TURNSTILE_SECRET_KEY = ""
 WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
 AI_GATEWAY_ID = ""
 

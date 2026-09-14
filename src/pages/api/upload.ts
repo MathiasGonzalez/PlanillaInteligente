@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { rowEntries, spreadsheetColumns, spreadsheetEnrichments, spreadsheets } from '../../db/schema';
 import { parseWorkbookIntoDatabase } from '../../lib/excel-parser';
 import { scheduleSpreadsheetEnrichment } from '../../lib/spreadsheet-enrichment';
@@ -112,10 +112,10 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
     try {
       await Promise.all([
         locals.runtime.env.BUCKET.delete(r2Key),
-        locals.db.delete(rowEntries).where(eq(rowEntries.spreadsheetId, spreadsheetId)),
-        locals.db.delete(spreadsheetColumns).where(eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
-        locals.db.delete(spreadsheetEnrichments).where(eq(spreadsheetEnrichments.spreadsheetId, spreadsheetId)),
-        locals.db.delete(spreadsheets).where(eq(spreadsheets.id, spreadsheetId)),
+        locals.db.delete(rowEntries).where(and(eq(rowEntries.tenantId, locals.tenantId), eq(rowEntries.spreadsheetId, spreadsheetId))),
+        locals.db.delete(spreadsheetColumns).where(and(eq(spreadsheetColumns.tenantId, locals.tenantId), eq(spreadsheetColumns.spreadsheetId, spreadsheetId))),
+        locals.db.delete(spreadsheetEnrichments).where(and(eq(spreadsheetEnrichments.tenantId, locals.tenantId), eq(spreadsheetEnrichments.spreadsheetId, spreadsheetId))),
+        locals.db.delete(spreadsheets).where(and(eq(spreadsheets.tenantId, locals.tenantId), eq(spreadsheets.id, spreadsheetId))),
       ]);
     } catch {
       // Ignore cleanup failures so the upload endpoint still returns the original error response.

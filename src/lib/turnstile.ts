@@ -23,6 +23,8 @@ interface VerifyTurnstileOptions {
   idempotencyKey?: string;
 }
 
+const TURNSTILE_TIMEOUT_MS = 10_000;
+
 export async function verifyTurnstileToken({
   token,
   secretKey,
@@ -49,13 +51,27 @@ export async function verifyTurnstileToken({
     body.set('idempotency_key', idempotencyKey);
   }
 
-  const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body,
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TURNSTILE_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      errorCodes: [error instanceof DOMException && error.name === 'AbortError' ? 'request-timeout' : 'network-error'],
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     return {
@@ -64,7 +80,15 @@ export async function verifyTurnstileToken({
     };
   }
 
-  const payload = (await response.json()) as CloudflareTurnstileResponse;
+  let payload: CloudflareTurnstileResponse;
+  try {
+    payload = (await response.json()) as CloudflareTurnstileResponse;
+  } catch {
+    return {
+      success: false,
+      errorCodes: ['invalid-json-response'],
+    };
+  }
 
   return {
     success: payload.success,

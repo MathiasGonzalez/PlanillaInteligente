@@ -19,9 +19,11 @@ function isSpreadsheetEnrichmentMessage(value: unknown): value is SpreadsheetEnr
     && 'tenantId' in value
     && 'spreadsheetId' in value
     && 'triggeredBy' in value
+    && 'requestedByUserId' in value
     && typeof value.tenantId === 'string'
     && typeof value.spreadsheetId === 'string'
-    && typeof value.triggeredBy === 'string';
+    && typeof value.triggeredBy === 'string'
+    && typeof value.requestedByUserId === 'string';
 }
 
 export default {

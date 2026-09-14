@@ -25,8 +25,9 @@ export const GET: APIRoute = async ({ url, locals }) => {
       spreadsheetId,
       bucket: locals.runtime.env.BUCKET,
     });
+    const body = Uint8Array.from(exportResult.bytes);
 
-    return new Response(exportResult.bytes as unknown as BodyInit, {
+    return new Response(body, {
       status: 200,
       headers: {
         'content-type': exportResult.contentType,
