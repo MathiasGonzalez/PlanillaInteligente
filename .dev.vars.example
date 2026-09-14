@@ -1,0 +1,17 @@
+# Copy this file to .dev.vars and fill in your local values.
+# .dev.vars is loaded automatically by `wrangler pages dev` and `astro dev` (via platformProxy).
+# Never commit .dev.vars — it is already in .gitignore.
+
+# Google OAuth credentials (https://console.cloud.google.com/)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Cloudflare Turnstile secret key (https://dash.cloudflare.com/ → Turnstile)
+# Use the test secret key for local development: 1x0000000000000000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+
+# Workers AI model — optional, defaults to @cf/meta/llama-3.1-8b-instruct
+# WORKERS_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+
+# AI Gateway ID — optional, leave empty to call Workers AI directly
+# AI_GATEWAY_ID=your-ai-gateway-id

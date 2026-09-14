@@ -1,11 +1,21 @@
 # Despliegue en Cloudflare
 
-Este documento explica cómo queda desplegada la app en Cloudflare y qué componentes de la infraestructura se utilizan en producción.
+Este documento explica la arquitectura de despliegue y cómo opera la app en producción.
+Para crear los recursos desde cero, ver **[SETUP_CLOUDFLARE.md](./SETUP_CLOUDFLARE.md)**.
 
 ## 1. Arquitectura general
 La app está construida como un proyecto Astro con adapter de Cloudflare (`@astrojs/cloudflare`) y salida `server`.
 
 Esto significa que la aplicación se ejecuta en Workers/Pages de Cloudflare y no como una app Node pura. El runtime usa bindings de Cloudflare para acceder a la base de datos, sesiones, almacenamiento de archivos y cola de tareas.
+
+**Importante:** la app está compuesta por dos piezas desplegables independientes:
+
+| Pieza | Tipo | Directorio |
+|---|---|---|
+| App principal (UI + API) | Cloudflare Pages | raíz del repo |
+| Consumer de enriquecimiento | Cloudflare Worker | `workers/enrichment-consumer/` |
+
+Cloudflare Pages **solo soporta queue producers**. El handler `queue()` debe vivir en un Worker separado.
 
 ## 2. Componentes principales
 
@@ -25,7 +35,12 @@ La conexión se crea en `src/middleware.ts`:
 const db = drizzle(locals.runtime.env.DB, { schema });
 ```
 
-Esto implica que la base de datos real debe existir en Cloudflare y estar vinculada al Worker/Pages.
+El esquema está en `src/db/schema.ts`. Las migraciones se generan con:
+
+```bash
+npm run db:generate   # genera SQL en migrations/
+npm run db:migrate    # aplica en producción
+```
 
 ### 2.2 KV para sesiones
 El binding `SESSION_KV` se usa para cachear la sesión del usuario y reducir lecturas repetidas a D1.
@@ -51,46 +66,67 @@ Proceso típico:
 4. si falla, se elimina la referencia en storage
 
 ### 2.4 Queue para enriquecimiento asíncrono
-El binding `ENRICHMENT_QUEUE` se usa para enviar tareas de enriquecimiento IA.
+El binding `ENRICHMENT_QUEUE` se declara como **producer** en el Pages `wrangler.toml`. El consumer corre como Worker separado.
 
-El flujo de la app es:
-1. el usuario sube la planilla
-2. la app detecta esquema y quiere enriquecer columnas
-3. la tarea puede ir a la queue
-4. si la queue no existe o falla, la app cae a `inline` y procesa en el mismo request
+La arquitectura es:
+- **Producer (Pages)**: `src/lib/spreadsheet-enrichment.ts` envía mensajes con `env.ENRICHMENT_QUEUE.send()`
+- **Consumer (Worker)**: `workers/enrichment-consumer/wrangler.toml` + `src/queue.ts` procesan los mensajes
 
-Esto está implementado en:
-- `src/lib/spreadsheet-enrichment.ts`
-- `src/pages/api/ai/enrichment.ts`
+El consumer está configurado con:
+- `max_batch_size = 10`
+- `max_batch_timeout = 30` (segundos — importante para procesamiento IA)
+- `max_retries = 3`
+- `dead_letter_queue` para capturar mensajes que fallan repetidamente
+
+Si la queue no existe o falla, la app cae a procesamiento inline en el mismo request.
 
 ### 2.5 Workers AI
-El binding `AI` se usa para inferir metadata de la planilla mediante IA, por ejemplo:
-- semantic type de columnas
-- vista recomendada
-- etiquetas de campos
-- columnas sensibles
+El binding `AI` se usa para inferir metadata de la planilla mediante IA.
 
-En `src/lib/spreadsheet-enrichment.ts` hay una lógica clara:
-- si `AI` está disponible, se usa Workers AI
-- si no está disponible o falla, se usa un heurístico local
+Si `AI_GATEWAY_ID` está configurado, todas las llamadas se enrutan a través de AI Gateway para analytics, caché y control de costos:
 
-Esto hace que la app no falle si la IA no está configurada.
+```ts
+const options = env.AI_GATEWAY_ID ? { gateway: { id: env.AI_GATEWAY_ID } } : undefined;
+const response = await env.AI.run(model, input, options);
+```
 
-## 3. Configuración declarada en wrangler.toml
-El proyecto define bindings y configuración en `wrangler.toml`:
+Si `AI` no está disponible o falla, se usa heurística local como fallback.
 
+## 3. Gestión de secrets
+
+**Nunca** poner secrets en `wrangler.toml` (`[vars]` es texto plano y visible en el repo).
+
+| Variable | Tipo | Configuración |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | var pública | `wrangler.toml [vars]` |
+| `GOOGLE_CLIENT_SECRET` | **secret** | `wrangler secret put GOOGLE_CLIENT_SECRET` |
+| `TURNSTILE_SECRET_KEY` | **secret** | `wrangler secret put TURNSTILE_SECRET_KEY` |
+| `WORKERS_AI_MODEL` | var pública | `wrangler.toml [vars]` |
+| `AI_GATEWAY_ID` | var pública | `wrangler.toml [vars]` |
+
+Para desarrollo local, usar `.dev.vars` (ver `SETUP_LOCAL.md`).
+
+## 4. Configuración declarada en wrangler.toml
+
+### Pages (raíz)
 ```toml
+[vars]
+GOOGLE_CLIENT_ID = ""
+WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AI_GATEWAY_ID = ""
+
 [ai]
 binding = "AI"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "planilla-inteligente"
-database_id = "replace-with-d1-database-id"
+database_id = "..."
+migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "SESSION_KV"
-id = "replace-with-kv-namespace-id"
+id = "..."
 
 [[r2_buckets]]
 binding = "BUCKET"
@@ -101,50 +137,49 @@ binding = "ENRICHMENT_QUEUE"
 queue = "planilla-inteligente-enrichment"
 ```
 
-Y además define variables:
-
+### Worker consumer (workers/enrichment-consumer/)
 ```toml
-[vars]
-GOOGLE_CLIENT_ID = ""
-GOOGLE_CLIENT_SECRET = ""
-TURNSTILE_SECRET_KEY = ""
-WORKERS_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct"
-AI_GATEWAY_ID = ""
+[[queues.consumers]]
+queue = "planilla-inteligente-enrichment"
+max_batch_size = 10
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "planilla-inteligente-enrichment-dlq"
 ```
 
-## 4. Flujo típico de despliegue
-En producción, el flujo esperable es:
+## 5. Separación de ambientes (producción / preview)
+El `wrangler.toml` de Pages usa `[env.preview]` para aislar recursos del ambiente preview:
 
-1. el código se publica con GitHub Actions o con `wrangler pages deploy ./dist`
-2. Cloudflare crea/actualiza el proyecto de Pages y asegura que la build de Astro se sirva desde `./dist`
-3. la app tiene acceso a D1, KV, R2, Queue y AI por bindings
-4. cada request usa esos bindings para operar
-5. la sesión y la data se persisten en la infraestructura Cloudflare
+- DB de preview: `planilla-inteligente-preview`
+- KV de preview: namespace separado
+- R2 de preview: bucket separado
+- Queue de preview: `planilla-inteligente-enrichment-preview`
 
-## 5. Qué pasa si no hay un binding
-El sistema ya está diseñado para tolerar la ausencia de algunos recursos:
+Esto evita que un deploy a una rama `dev` toque datos de producción.
+
+## 6. Flujo típico de despliegue
+El workflow `.github/workflows/deploy-cloudflare-pages.yml` orquesta el deploy en este orden:
+
+1. Validar que los secrets requeridos existen
+2. Aplicar migraciones D1 (`wrangler d1 migrations apply ... --remote`)
+3. Desplegar el Worker consumer (`wrangler deploy --config workers/enrichment-consumer/wrangler.toml`)
+4. Desplegar el proyecto Pages (`wrangler pages deploy ./dist`)
+
+Este orden garantiza que la base de datos esté actualizada antes de que el código nuevo entre en producción.
+
+## 7. Qué pasa si no hay un binding
+El sistema está diseñado para tolerar la ausencia de algunos recursos:
 
 - si `ENRICHMENT_QUEUE` no existe, la app usa procesamiento inline
 - si `AI` no existe o falla, usa heurística local
-- si `SESSION_KV` no está disponible, la app sigue funcionando sin cache de sesión; el middleware valida la presencia del binding antes de leer o guardar en KV
+- si `SESSION_KV` no está disponible, la app sigue funcionando sin cache de sesión
 
-Esto hace que la app sea más robusta y facilite pruebas y migraciones.
+## 8. Resumen corto
+La app queda desplegada en Cloudflare como:
 
-## 6. Recomendación para producción
-Para un despliegue real, conviene dejar estos elementos bien configurados:
-- D1 con IDs reales y esquema aplicado
-- KV namespace para sesiones
-- bucket R2 para uploads
-- queue para enriquecimiento
-- secretos de Google y Turnstile cargados fuera del repo
-- Workers AI activo o fallback seguro habilitado
+| Componente | Tipo | Bindings usados |
+|---|---|---|
+| App principal | Pages (SSR Worker) | D1, KV, R2, Queue producer, AI |
+| Consumer queue | Worker standalone | D1, Queue consumer, AI |
 
-## 7. Resumen corto
-La app queda desplegada en Cloudflare como un Worker/Pages con:
-- D1 para la base de datos relacional
-- KV para sesión cacheada
-- R2 para archivos de planillas
-- Queues para procesamiento asíncrono
-- Workers AI para inferencia inteligente
-
-Toda esta integración se declara con `wrangler.toml` y la app la consume vía `locals.runtime.env.*`.
+Toda la configuración se declara en los respectivos `wrangler.toml` y la app consume los bindings vía `locals.runtime.env.*` (Pages) y `env.*` (Worker consumer).

@@ -3,5 +3,6 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "types": ["@cloudflare/workers-types"]
-  }
+  },
+  "exclude": ["drizzle.config.ts"]
 }

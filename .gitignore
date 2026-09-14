@@ -318,6 +318,9 @@ dist/
 .astro/
 .wrangler/
 
+# Cloudflare local secrets — never commit
+.dev.vars
+
 # Visual Studio 6 build log
 *.plg
 
