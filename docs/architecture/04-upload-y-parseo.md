@@ -37,7 +37,7 @@ flowchart TD
 
 ## Parseo del workbook (`parseWorkbookIntoDatabase`)
 
-`src/lib/excel-parser.ts` lee el workbook con `xlsx-populate`:
+`src/spreadsheets/parsing/parse-workbook.ts` lee el workbook con `xlsx-populate`:
 
 1. **Primera hoja**: solo se procesa la primera hoja del libro (`workbook.sheet(0)`).
 2. **Headers**: la primera fila se trata como nombres de columnas. Se genera un `key` normalizado (snake_case) y un `label` legible.

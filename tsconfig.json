@@ -4,5 +4,5 @@
     "jsx": "react-jsx",
     "types": ["@cloudflare/workers-types"]
   },
-  "exclude": ["drizzle.config.ts"]
+  "exclude": ["dist", "drizzle.config.ts"]
 }

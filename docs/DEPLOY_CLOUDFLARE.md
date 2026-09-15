@@ -12,10 +12,25 @@ Esto significa que la aplicación se ejecuta en Workers/Pages de Cloudflare y no
 
 | Pieza | Tipo | Directorio |
 |---|---|---|
-| App principal (UI + API) | Cloudflare Pages | raíz del repo |
-| Consumer de enriquecimiento | Cloudflare Worker | `workers/enrichment-consumer/` |
+| App principal (UI + API) | 🟧 Cloudflare Pages | raíz del repo |
+| Consumer de enriquecimiento | 🧩 Cloudflare Worker | `workers/enrichment-consumer/` |
 
 Cloudflare Pages **solo soporta queue producers**. El handler `queue()` debe vivir en un Worker separado.
+
+## 1.1 Convención visual de recursos Cloudflare
+
+| Icono | Recurso |
+|---|---|
+| 🟧 | Cloudflare Pages |
+| 🧩 | Cloudflare Worker |
+| 🗄️ | D1 Database |
+| 🧰 | KV Namespace |
+| 🪣 | R2 Bucket |
+| 📬 | Queue producer |
+| 📥 | Queue consumer |
+| 🧠 | Workers AI |
+| 🚪 | AI Gateway |
+| 🧯 | Dead Letter Queue |
 
 ## 2. Componentes principales
 
@@ -29,10 +44,10 @@ Se utiliza para:
 - row entries
 - enriquecimiento IA persistido
 
-La conexión se crea en `src/middleware.ts`:
+La conexión se crea en `src/middleware.ts`, a través del adaptador centralizado en `src/bindings/d1.ts`:
 
 ```ts
-const db = drizzle(locals.runtime.env.DB, { schema });
+const db = createDatabase(cloudflareEnv.DB);
 ```
 
 El esquema está en `src/db/schema.ts`. Las migraciones se generan con:
@@ -57,7 +72,7 @@ Flujo:
 El binding `BUCKET` se usa para guardar los archivos subidos por usuario, por ejemplo planillas Excel/CSV.
 
 Se usa en:
-- `src/pages/api/upload.ts`
+- `src/features/spreadsheets/api/upload-route.ts`
 
 Proceso típico:
 1. el cliente sube un archivo
@@ -69,8 +84,8 @@ Proceso típico:
 El binding `ENRICHMENT_QUEUE` se declara como **producer** en el Pages `wrangler.toml`. El consumer corre como Worker separado.
 
 La arquitectura es:
-- **Producer (Pages)**: `src/lib/spreadsheet-enrichment.ts` envía mensajes con `env.ENRICHMENT_QUEUE.send()`
-- **Consumer (Worker)**: `workers/enrichment-consumer/wrangler.toml` + `src/queue.ts` procesan los mensajes
+- **Producer (Pages)**: `src/spreadsheets/enrichment/service.ts` envía mensajes vía `src/bindings/queue.ts` (`sendEnrichmentJob`)
+- **Consumer (Worker)**: `workers/enrichment-consumer/wrangler.toml` + `src/queue.ts` delegan en `src/spreadsheets/queue/consumer.ts`
 
 El consumer está configurado con:
 - `max_batch_size = 10`
@@ -179,7 +194,7 @@ La app queda desplegada en Cloudflare como:
 
 | Componente | Tipo | Bindings usados |
 |---|---|---|
-| App principal | Pages (SSR Worker) | D1, KV, R2, Queue producer, AI |
-| Consumer queue | Worker standalone | D1, Queue consumer, AI |
+| App principal | 🟧 Pages (SSR Worker) | 🗄️ D1, 🧰 KV, 🪣 R2, 📬 Queue producer, 🧠 AI |
+| Consumer queue | 🧩 Worker standalone | 🗄️ D1, 📥 Queue consumer, 🧠 AI |
 
-Toda la configuración se declara en los respectivos `wrangler.toml` y la app consume los bindings vía `locals.runtime.env.*` (Pages) y `env.*` (Worker consumer).
+Toda la configuración se declara en los respectivos `wrangler.toml`. En Pages, la app accede a los bindings vía `src/platform/cloudflare/env.ts` (`cloudflareEnv.*`) y los usa a través de los adaptadores en `src/bindings/`; en el consumer de queue, el Worker recibe `env.*` directamente en el handler y lo pasa a los adaptadores.

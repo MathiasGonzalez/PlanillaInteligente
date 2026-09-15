@@ -6,27 +6,29 @@ El enriquecimiento analiza la estructura de una planilla (columnas + muestra de 
 
 ```mermaid
 graph LR
-    Upload["POST /api/upload\no POST /api/ai/enrichment"] --> SE["scheduleSpreadsheetEnrichment\nsrc/lib/spreadsheet-enrichment.ts"]
+    Upload["POST /api/upload\no POST /api/ai/enrichment"] --> SE["scheduleSpreadsheetEnrichment\nsrc/spreadsheets/enrichment/service.ts"]
 
-    SE -->|"ENRICHMENT_QUEUE\ndisponible"| Q["Queue\nplanilla-inteligente-enrichment"]
+    SE -->|"ENRICHMENT_QUEUE\ndisponible"| Q["📬 Queue\nplanilla-inteligente-enrichment"]
     SE -->|"sin queue\no falla"| Inline["runSpreadsheetEnrichment\ninline en el request"]
 
-    Q --> Consumer["Worker consumer\nworkers/enrichment-consumer/\nmax_batch=10, timeout=30s, retries=3"]
+    Q --> Consumer["🧩 Worker consumer\nworkers/enrichment-consumer/\nmax_batch=10, timeout=30s, retries=3"]
     Consumer --> Run["runSpreadsheetEnrichment"]
     Inline --> Run
 
-    Run --> Ctx["Construir contexto:\n- nombre + sheetName\n- columnas (key, label, dataType)\n- hasta 5 filas de muestra\n  (valores sensibles REDACTED)"]
-    Ctx --> AI{Workers AI\ndisponible?}
-    AI -->|"Sí"| LLM["AI.run(model, prompt)\n@cf/meta/llama-3.1-8b-instruct\nopc. vía AI Gateway"]
+    Run --> Ctx["🗄️ Construir contexto:\n- nombre + sheetName\n- columnas (key, label, dataType)\n- hasta 5 filas de muestra\n  (valores sensibles REDACTED)"]
+    Ctx --> AI{🧠 Workers AI\ndisponible?}
+    AI -->|"Sí"| LLM["🧠 AI.run(model, prompt)\n@cf/meta/llama-3.1-8b-instruct\nopc. vía 🚪 AI Gateway"]
     AI -->|"No / falla"| Heuristic["Heurística semántica\nlocal (fallback)"]
     LLM -->|"Éxito"| Normalize["Normalizar JSON de IA\nvalidar tipos permitidos"]
     LLM -->|"Falla"| Heuristic
-    Normalize --> Persist["UPDATE spreadsheet_enrichments\nstatus=completed, config=JSON"]
+    Normalize --> Persist["🗄️ UPDATE spreadsheet_enrichments\nstatus=completed, config=JSON"]
     Heuristic --> Persist
     Persist --> Done["✓ Enriquecimiento\npersistido"]
 
-    Consumer -->|"falla × 3"| DLQ["Dead Letter Queue\n...enrichment-dlq"]
+    Consumer -->|"falla × 3"| DLQ["🧯 Dead Letter Queue\n...enrichment-dlq"]
 ```
+
+> **Iconos:** 📬 queue producer, 🧩 Worker consumer, 🗄️ D1, 🧠 Workers AI, 🚪 AI Gateway, 🧯 dead letter queue.
 
 ## Modos de ejecución
 

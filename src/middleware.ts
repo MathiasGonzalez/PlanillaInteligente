@@ -1,10 +1,10 @@
-import { env } from 'cloudflare:workers';
 import type { AstroCookies } from 'astro';
 import { defineMiddleware } from 'astro:middleware';
 import { and, eq, gt } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/d1';
 import { memberships, sessions, users } from './db/schema';
-import * as schema from './db/schema';
+import { createDatabase } from './bindings/d1';
+import { getKvJson, putKvJson } from './bindings/kv';
+import { cloudflareEnv } from './platform/cloudflare/env';
 
 export interface SessionUser {
   id: string;
@@ -56,7 +56,7 @@ function clearKnownSessionCookies(cookies: AstroCookies) {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, cookies, url } = context;
-  const db = drizzle(env.DB, { schema });
+  const db = createDatabase(cloudflareEnv.DB);
 
   locals.db = db;
   locals.user = null;
@@ -73,11 +73,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect('/login');
   }
 
-  const sessionKv = env.SESSION_KV;
   const cacheKey = `session:${sessionToken}`;
-  const cachedSession = sessionKv
-    ? await sessionKv.get<SessionCacheEntry>(cacheKey, 'json')
-    : null;
+  const cachedSession = await getKvJson<SessionCacheEntry>(cloudflareEnv.SESSION_KV, cacheKey);
 
   if (cachedSession && new Date(cachedSession.session.expiresAt) > new Date()) {
     locals.user = cachedSession.user;
@@ -137,19 +134,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
   };
   locals.tenantId = record.activeOrganizationId;
 
-  if (sessionKv) {
-    await sessionKv.put(
-      cacheKey,
-      JSON.stringify({
-        tenantId: locals.tenantId,
-        user: locals.user,
-        session: locals.session,
-      }),
-      {
-        expirationTtl: Math.max(60, Math.floor((record.expiresAt.getTime() - Date.now()) / 1000)),
-      },
-    );
-  }
+  await putKvJson(
+    cloudflareEnv.SESSION_KV,
+    cacheKey,
+    { tenantId: locals.tenantId, user: locals.user, session: locals.session },
+    Math.floor((record.expiresAt.getTime() - Date.now()) / 1000),
+  );
 
   return next();
 });
