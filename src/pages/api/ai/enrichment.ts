@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
 import { json } from '../../../lib/api-response';
 import { getSpreadsheetEnrichment, runSpreadsheetEnrichment, scheduleSpreadsheetEnrichment } from '../../../lib/spreadsheet-enrichment';
@@ -33,7 +34,6 @@ export const POST: APIRoute = async ({ request, locals }) => {
   }
 
   const mode = payload?.mode === 'queue' ? 'queue' : 'inline';
-  const env = locals.runtime.env;
 
   const result =
     mode === 'queue'

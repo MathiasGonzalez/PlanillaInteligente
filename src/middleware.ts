@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers';
 import type { AstroCookies } from 'astro';
 import { defineMiddleware } from 'astro:middleware';
 import { and, eq, gt } from 'drizzle-orm';
@@ -55,7 +56,7 @@ function clearKnownSessionCookies(cookies: AstroCookies) {
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { locals, cookies, url } = context;
-  const db = drizzle(locals.runtime.env.DB, { schema });
+  const db = drizzle(env.DB, { schema });
 
   locals.db = db;
   locals.user = null;
@@ -72,7 +73,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     return context.redirect('/login');
   }
 
-  const sessionKv = locals.runtime.env.SESSION_KV;
+  const sessionKv = env.SESSION_KV;
   const cacheKey = `session:${sessionToken}`;
   const cachedSession = sessionKv
     ? await sessionKv.get<SessionCacheEntry>(cacheKey, 'json')

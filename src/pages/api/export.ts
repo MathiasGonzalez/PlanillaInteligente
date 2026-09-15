@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
 import { exportSpreadsheetFromDatabase } from '../../lib/excel-exporter';
 
@@ -23,7 +24,7 @@ export const GET: APIRoute = async ({ url, locals }) => {
       db: locals.db,
       tenantId: locals.tenantId,
       spreadsheetId,
-      bucket: locals.runtime.env.BUCKET,
+      bucket: env.BUCKET,
     });
     return new Response(exportResult.bytes, {
       status: 200,

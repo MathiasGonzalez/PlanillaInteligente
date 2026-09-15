@@ -27,7 +27,7 @@ function isSpreadsheetEnrichmentMessage(value: unknown): value is SpreadsheetEnr
 }
 
 export default {
-  async queue(batch: QueueBatch<SpreadsheetEnrichmentMessage>, env: Env) {
+  async queue(batch: QueueBatch<SpreadsheetEnrichmentMessage>, env: Cloudflare.Env) {
     const db = drizzle(env.DB, { schema });
 
     for (const message of batch.messages) {

@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers';
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
 import { rowEntries, spreadsheetColumns, spreadsheetEnrichments, spreadsheets } from '../../db/schema';
@@ -25,7 +26,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
 
   const verification = await verifyTurnstileToken({
     token: turnstileToken,
-    secretKey: locals.runtime.env.TURNSTILE_SECRET_KEY,
+    secretKey: env.TURNSTILE_SECRET_KEY,
     remoteIp: clientAddress,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -53,7 +54,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
   const r2Key = `${locals.tenantId}/spreadsheets/${spreadsheetId}.xlsx`;
 
   try {
-    await locals.runtime.env.BUCKET.put(r2Key, arrayBuffer, {
+    await env.BUCKET.put(r2Key, arrayBuffer, {
       httpMetadata: {
         contentType: uploadedFile.type || XLSX_CONTENT_TYPE,
       },
@@ -87,7 +88,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
 
     const enrichment = await scheduleSpreadsheetEnrichment({
       db: locals.db,
-      env: locals.runtime.env,
+      env,
       tenantId: locals.tenantId,
       spreadsheetId,
       requestedByUserId: locals.user.id,
@@ -111,7 +112,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
   } catch (error) {
     try {
       await Promise.all([
-        locals.runtime.env.BUCKET.delete(r2Key),
+        env.BUCKET.delete(r2Key),
         locals.db.delete(rowEntries).where(and(eq(rowEntries.tenantId, locals.tenantId), eq(rowEntries.spreadsheetId, spreadsheetId))),
         locals.db.delete(spreadsheetColumns).where(and(eq(spreadsheetColumns.tenantId, locals.tenantId), eq(spreadsheetColumns.spreadsheetId, spreadsheetId))),
         locals.db.delete(spreadsheetEnrichments).where(and(eq(spreadsheetEnrichments.tenantId, locals.tenantId), eq(spreadsheetEnrichments.spreadsheetId, spreadsheetId))),
