@@ -1,6 +1,6 @@
 # 06 — Exportación de planillas
 
-El endpoint `GET /api/export` reconstruye el archivo `.xlsx` original desde los datos almacenados en D1 y R2, y lo devuelve como descarga directa.
+El endpoint `GET /api/export` toma el workbook base desde R2, lo actualiza con los datos actuales almacenados en D1 y devuelve el resultado como descarga directa.
 
 ## Flujo
 
@@ -12,31 +12,30 @@ flowchart TD
     C -->|No| Z2[400 Missing spreadsheetId]
     C -->|Sí| D[exportSpreadsheetFromDatabase\nsrc/lib/excel-exporter.ts]
 
-    D --> E[Leer spreadsheets\ncondición: tenantId + spreadsheetId]
+    D --> E[Leer metadata en D1\nr2Key + sheetName + originalFilename]
     E --> F{¿Existe y\npertenece al tenant?}
     F -->|No| Z3[404 / 500]
-    F -->|Sí| G{¿Tiene r2Key?}
-
-    G -->|"Sí (tiene archivo original)"| H[GET desde R2\nbucket.get r2Key]
-    H -->|Éxito| I[Devolver bytes originales\ncontent-type del objeto R2]
-    H -->|Falla o null| J[Reconstruir desde D1]
-
-    G -->|"No"| J
-    J --> K[Leer spreadsheet_columns\nordenadas por columnIndex]
-    K --> L[Leer row_entries\nordenadas por rowIndex]
-    L --> M[Construir matriz:\nheaders + filas desde row_entries.data JSON]
-    M --> N[Generar workbook xlsx\ncon xlsx-js-style]
-    N --> O[Devolver bytes generados\ncontent-type: .xlsx]
-
-    I & O --> P["Response 200\ncontent-disposition: attachment;\nfilename=nombre.xlsx"]
+    F -->|Sí| G[Obtener template desde R2\nbucket.get r2Key]
+    G -->|null| Z4[500 The base workbook could not be found in R2]
+    G -->|Éxito| H[En paralelo:\nleer spreadsheet_columns,\nleer row_entries,\narrayBuffer del template]
+    H --> I[Cargar workbook con\nxlsx-populate]
+    I --> J[Buscar worksheet por sheetName\no usar sheet 0]
+    J --> K[Construir matriz:\nheaders + filas desde D1]
+    K --> L[Escribir matriz sobre la hoja\ny limpiar filas sobrantes]
+    L --> M[Serializar workbook modificado\na bytes .xlsx]
+    M --> N["Response 200\ncontent-disposition: attachment;\nfilename=nombre.xlsx"]
 ```
 
 ## Estrategia de reconstrucción
 
-El exportador prioriza el archivo original guardado en R2:
+El exportador no tiene dos caminos alternativos. Siempre sigue esta estrategia:
 
-1. **R2 disponible**: devuelve los bytes tal cual fueron subidos, preservando formato, estilos y fórmulas del Excel original.
-2. **R2 no disponible o sin `r2Key`**: reconstruye el workbook a partir de los datos normalizados en D1. El resultado es un xlsx funcional pero sin estilos ni fórmulas originales.
+1. **Lee metadata de la planilla en D1** para obtener `r2Key`, `sheetName` y `originalFilename`.
+2. **Descarga el template desde R2** con `bucket.get(spreadsheet.r2Key)`. Si el objeto no existe, el export falla con error 500; no hay fallback.
+3. **Lee en paralelo las columnas y filas desde D1** mientras convierte el template de R2 a `ArrayBuffer`.
+4. **Carga el workbook con `xlsx-populate`** y selecciona la hoja por `sheetName`, con fallback a la hoja `0` si ese nombre no está presente.
+5. **Escribe el header y las filas actuales desde D1** sobre la hoja del template, limpiando filas antiguas sobrantes.
+6. **Devuelve una copia modificada del workbook original**: se reutiliza el template de R2, pero siempre actualizado con los datos más recientes de D1.
 
 ## Content-Disposition
 

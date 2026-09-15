@@ -1,6 +1,6 @@
 # 04 — Upload y parseo de planillas
 
-El endpoint `POST /api/upload` es el punto de entrada principal de datos. Recibe un archivo `.xlsx`, lo valida, lo persiste en R2 y lo parsea a D1, todo dentro de una transacción lógica con rollback atómico en caso de fallo.
+El endpoint `POST /api/upload` es el punto de entrada principal de datos. Recibe un archivo `.xlsx`, lo valida, lo persiste en R2 y lo parsea a D1, todo dentro de una transacción lógica con limpieza best-effort en caso de fallo.
 
 ## Flujo completo
 
@@ -17,14 +17,14 @@ flowchart TD
     F --> G[Generar spreadsheetId\nr2Key = tenantId/spreadsheets/id.xlsx]
     G --> H[PUT en R2\narrayBuffer + contentType]
     H --> I[INSERT spreadsheets en D1\nid, tenantId, userId, name, r2Key, checksum...]
-    I --> J[parseWorkbookIntoDatabase\nleer primera hoja con xlsx-js-style]
+    I --> J[parseWorkbookIntoDatabase\nleer primera hoja con xlsx-populate]
     J --> K[INSERT spreadsheet_columns\npor cada header detectado]
     K --> L[INSERT row_entries\ncomo JSON por cada fila]
     L --> M[UPDATE spreadsheets.sheetName]
     M --> N[scheduleSpreadsheetEnrichment\nver doc 05]
     N --> O[201 Created\n+ resumen + enrichment status]
 
-    H -->|Error| ERR[Rollback atómico]
+    H -->|Error| ERR[Limpieza best-effort]
     I -->|Error| ERR
     J -->|Error| ERR
     ERR --> ER1[DELETE R2 key]
@@ -37,12 +37,13 @@ flowchart TD
 
 ## Parseo del workbook (`parseWorkbookIntoDatabase`)
 
-`src/lib/excel-parser.ts` lee el workbook con `xlsx-js-style`:
+`src/lib/excel-parser.ts` lee el workbook con `xlsx-populate`:
 
-1. **Primera hoja**: solo se procesa la primera hoja del libro (`workbook.SheetNames[0]`).
+1. **Primera hoja**: solo se procesa la primera hoja del libro (`workbook.sheet(0)`).
 2. **Headers**: la primera fila se trata como nombres de columnas. Se genera un `key` normalizado (snake_case) y un `label` legible.
 3. **Tipo de dato inferido**: se detecta si la columna es `number`, `boolean`, `date` o `string` inspeccionando los valores de la columna.
-4. **Row entries**: cada fila se serializa como un objeto JSON `{ key: value }` y se inserta en `row_entries.data`.
+4. **Matriz de celdas**: los valores se obtienen desde `worksheet.usedRange()?.value()` y luego se normalizan a una matriz procesable.
+5. **Row entries**: cada fila se serializa como un objeto JSON `{ key: value }` y se inserta en `row_entries.data`.
 
 ```mermaid
 flowchart LR
@@ -53,9 +54,9 @@ flowchart LR
     ROWS --> RE["row_entries\n(row_index, data: JSON)"]
 ```
 
-## Rollback atómico
+## Limpieza best-effort (rollback)
 
-D1 no soporta transacciones distribuidas con R2, por eso el rollback es **best-effort paralelo**: si el import falla en cualquier punto, se lanzan `Promise.all` con todas las operaciones de limpieza. Los fallos de limpieza se ignoran silenciosamente para que el endpoint siempre devuelva el error original.
+D1 no soporta transacciones distribuidas con R2, por eso no existe un rollback atómico real entre ambos sistemas. Si el import falla en cualquier punto, el endpoint ejecuta una **limpieza best-effort en paralelo** mediante `Promise.all(...)` para intentar borrar el objeto en R2 y los registros ya insertados en D1. Los fallos de limpieza se ignoran silenciosamente para que el endpoint siempre devuelva el error original, por lo que la reversión no está garantizada.
 
 ## Validaciones aplicadas
 
@@ -69,6 +70,8 @@ D1 no soporta transacciones distribuidas con R2, por eso el rollback es **best-e
 
 ## Respuesta 201
 
+Ejemplo común cuando el enriquecimiento queda **en cola**:
+
 ```json
 {
   "spreadsheetId": "uuid",
@@ -78,12 +81,14 @@ D1 no soporta transacciones distribuidas con R2, por eso el rollback es **best-e
   "columnsCount": 8,
   "rowsCount": 142,
   "enrichment": {
-    "status": "completed",
-    "mode": "inline",
-    "generatedBy": "ai",
-    "model": "@cf/meta/llama-3.1-8b-instruct",
+    "status": "pending",
+    "mode": "queue",
+    "generatedBy": null,
+    "model": null,
     "fallbackUsed": false,
     "errorMessage": null
   }
 }
 ```
+
+Si el enriquecimiento se resuelve inline, la respuesta puede llegar como `status: "completed"` y `mode: "inline"`, con `generatedBy: "workers-ai"` cuando usa Workers AI o `generatedBy: "heuristic"` junto con `fallbackUsed: true` cuando entra en fallback heurístico.

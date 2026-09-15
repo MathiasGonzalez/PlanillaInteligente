@@ -86,14 +86,40 @@ El consumer comparte el mismo D1 y AI binding que la app principal, pero **no** 
 `POST /api/ai/enrichment` permite re-disparar el enriquecimiento sobre una planilla existente:
 
 ```json
-// Request
-{ "spreadsheetId": "uuid", "mode": "queue" | "inline" }
-
-// Response 200
-{ "status": "completed" | "queued" | "failed", "generatedBy": "ai" | "heuristic", ... }
+{ "spreadsheetId": "uuid", "mode": "queue" }
 ```
 
-`GET /api/ai/enrichment?spreadsheetId=uuid` devuelve el estado actual del enriquecimiento.
+Ejemplo de respuesta cuando se usa `mode: "queue"` y el trabajo queda encolado:
+
+```json
+{
+  "status": "pending",
+  "mode": "queue",
+  "generatedBy": null,
+  "model": null,
+  "fallbackUsed": false,
+  "errorMessage": null,
+  "config": null
+}
+```
+
+Ejemplo de respuesta cuando se usa `mode: "inline"` y Workers AI está disponible:
+
+```json
+{
+  "status": "completed",
+  "mode": "inline",
+  "generatedBy": "workers-ai",
+  "model": "@cf/meta/llama-3.1-8b-instruct",
+  "fallbackUsed": false,
+  "errorMessage": null,
+  "config": {
+    "...": "SpreadsheetEnrichmentConfiguration"
+  }
+}
+```
+
+`GET /api/ai/enrichment?spreadsheetId=uuid` devuelve el estado actual del enriquecimiento como `SpreadsheetEnrichmentOutcome`.
 
 ## Variables de entorno relevantes
 

@@ -139,20 +139,54 @@ Las filas se almacenan en `ROW_ENTRIES.data` como JSON `{ key: value }`. Las cla
 `SPREADSHEET_ENRICHMENTS.config` guarda las sugerencias de IA (tipos semánticos, vista recomendada, título) sin mezclarlas con los datos operativos de `ROW_ENTRIES`. Esto permite re-enriquecer sin tocar los datos.
 
 ### Estructura de `config` (SpreadsheetEnrichmentConfiguration)
+
+Fuente canónica: `src/lib/spreadsheet-enrichment-types.ts`.
+
 ```ts
-{
-  title: string
-  summary: string
-  viewType: 'table' | 'kanban' | 'dashboard' | 'calendar' | 'gallery'
-  columns: Array<{
-    key: string
-    semanticType: 'email' | 'amount' | 'status' | 'date' | 'category' |
-                  'assignee' | 'phone' | 'url' | 'identifier' | 'name' |
-                  'long-text' | 'generic'
-    displayAs?: string
-    isPrimary?: boolean
-    isGroupBy?: boolean
-  }>
+// Tipos permitidos
+type SpreadsheetViewType      = 'table' | 'form' | 'kanban' | 'dashboard';
+type SpreadsheetEnrichmentProvider = 'heuristic' | 'workers-ai';
+type SpreadsheetSemanticType  =
+  | 'text' | 'long-text' | 'identifier' | 'name' | 'email' | 'amount'
+  | 'status' | 'date' | 'category' | 'assignee' | 'phone' | 'url'
+  | 'boolean' | 'number' | 'sensitive' | 'unknown';
+
+interface SpreadsheetColumnEnrichment {
+  key: string;
+  label: string;
+  dataType: 'string' | 'number' | 'boolean' | 'date' | 'json';
+  semanticType: SpreadsheetSemanticType;
+  displayLabel: string;
+  helpText: string;
+  visible: boolean;
+  editable: boolean;
+  required: boolean;
+  sensitive: boolean;
+  filterable: boolean;
+  groupable: boolean;
+  order: number;
+}
+
+interface SpreadsheetViewRecommendation {
+  type: SpreadsheetViewType;
+  enabled: boolean;
+  title: string;
+  description: string;
+  defaultSortKey: string | null;
+  defaultFilterKeys: string[];
+  groupingColumnKey: string | null;
+}
+
+interface SpreadsheetEnrichmentConfiguration {
+  version: '1';
+  title: string;
+  summary: string;
+  primaryView: SpreadsheetViewType;
+  recommendedViews: SpreadsheetViewRecommendation[];
+  kanbanColumnKey: string | null;
+  columns: SpreadsheetColumnEnrichment[];
+  generatedBy: SpreadsheetEnrichmentProvider;
+  model: string | null;
 }
 ```
 
