@@ -10,7 +10,7 @@ flowchart TD
     B -->|No| Z1[401 Unauthorized]
     B -->|Sí| C{¿Parámetro\nspreadsheetId presente?}
     C -->|No| Z2[400 Missing spreadsheetId]
-    C -->|Sí| D[exportSpreadsheetFromDatabase\nsrc/lib/excel-exporter.ts]
+    C -->|Sí| D[exportSpreadsheetFromDatabase\nsrc/spreadsheets/export/export-spreadsheet.ts]
 
     D --> E[Leer metadata en D1\nr2Key + sheetName + originalFilename]
     E --> F{¿Existe y\npertenece al tenant?}

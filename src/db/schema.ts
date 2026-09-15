@@ -4,7 +4,7 @@ import type {
   SpreadsheetEnrichmentProvider,
   SpreadsheetEnrichmentStatus,
   SpreadsheetTriggerSource,
-} from '../lib/spreadsheet-enrichment-types';
+} from '../spreadsheets/enrichment/types';
 
 const timestamps = {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),

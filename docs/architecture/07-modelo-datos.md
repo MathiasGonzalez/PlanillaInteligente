@@ -140,7 +140,7 @@ Las filas se almacenan en `ROW_ENTRIES.data` como JSON `{ key: value }`. Las cla
 
 ### Estructura de `config` (SpreadsheetEnrichmentConfiguration)
 
-Fuente canónica: `src/lib/spreadsheet-enrichment-types.ts`.
+Fuente canónica: `src/spreadsheets/enrichment/types.ts`.
 
 ```ts
 // Tipos permitidos
