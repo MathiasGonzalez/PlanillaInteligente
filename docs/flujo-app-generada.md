@@ -1,3 +1,10 @@
+> ⚠️ **DEPRECADO** — Este documento ya no se mantiene.
+> Ver los reemplazos en `docs/architecture/`:
+> - [04-upload-y-parseo.md](./architecture/04-upload-y-parseo.md) — flujo de upload y parseo
+> - [05-enriquecimiento-ia.md](./architecture/05-enriquecimiento-ia.md) — enriquecimiento IA y queue
+
+---
+
 # Flujo de generación y enriquecimiento de la app
 
 Este diagrama resume cómo una planilla se transforma en la base de una aplicación multi-tenant dentro de PlanillaInteligente.

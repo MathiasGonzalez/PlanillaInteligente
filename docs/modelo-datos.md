@@ -1,3 +1,9 @@
+> ⚠️ **DEPRECADO** — Este documento ya no se mantiene.
+> Ver el reemplazo en `docs/architecture/`:
+> - [07-modelo-datos.md](./architecture/07-modelo-datos.md) — diagrama ER completo y actualizado
+
+---
+
 # Modelo de datos multi-tenant
 
 Este diagrama muestra las entidades principales persistidas en D1 y sus relaciones para autenticación, tenancy, planillas y enriquecimiento IA.
