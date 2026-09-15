@@ -81,7 +81,7 @@ export const POST: APIRoute = async ({ request, locals, clientAddress }) => {
         sheetName: summary.sheetName,
         updatedAt: new Date(),
       })
-      .where(eq(spreadsheets.id, spreadsheetId));
+      .where(and(eq(spreadsheets.tenantId, locals.tenantId), eq(spreadsheets.id, spreadsheetId)));
 
     const enrichment = await scheduleSpreadsheetEnrichment({
       db: locals.db,

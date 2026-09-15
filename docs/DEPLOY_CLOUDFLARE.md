@@ -72,7 +72,7 @@ Flujo:
 El binding `BUCKET` se usa para guardar los archivos subidos por usuario, por ejemplo planillas Excel/CSV.
 
 Se usa en:
-- `src/features/spreadsheets/api/upload-route.ts`
+- `src/spreadsheets/api/upload-route.ts`
 
 Proceso típico:
 1. el cliente sube un archivo
