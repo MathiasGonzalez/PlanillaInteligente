@@ -53,34 +53,45 @@ No hay tests unitarios. La validación es: TypeScript + Astro check + build exit
 
 ```
 src/
-  components/       # Componentes UI (React en auth/, resto Astro)
-  db/schema.ts      # Definición del esquema Drizzle — única fuente de verdad del modelo de datos
-  lib/              # Lógica de negocio reutilizable
-    excel-parser.ts         # Parseo de .xlsx a D1
-    excel-exporter.ts       # Reconstrucción de .xlsx desde D1 + R2
-    spreadsheet-enrichment.ts  # Orquestación de enriquecimiento IA
-    spreadsheet-enrichment-types.ts
-    spreadsheet-matrix.ts
-    turnstile.ts
-    api-response.ts
-  middleware.ts     # Autenticación, sesión KV, tenant isolation
+  app/
+    http/responses.ts  # Helpers HTTP compartidos
+  bindings/            # Adaptadores por primitiva Cloudflare (1 archivo = 1 binding)
+    d1.ts              # Drizzle factory sobre D1Database
+    r2.ts              # put/get/delete sobre R2Bucket
+    kv.ts              # read/write sobre KVNamespace (sesiones)
+    ai.ts              # resolveAiModel + runAiInference sobre Workers AI
+    queue.ts           # sendEnrichmentJob tipado sobre Queue producer
+  components/          # Componentes UI (React en auth/, resto Astro)
+  db/schema.ts         # Definición del esquema Drizzle — única fuente de verdad del modelo de datos
+  spreadsheets/        # Feature de planillas: upload, parseo, exportación, enriquecimiento, queue consumer
+    api/               # Handlers de ruta (delegados desde pages/api/)
+    enrichment/        # Lógica de enriquecimiento IA (contracts, heuristics, ai-provider, repository, service)
+    export/            # Exportación de .xlsx desde D1 + R2
+    parsing/           # Parseo de .xlsx a D1
+    queue/             # Consumer de Cloudflare Queue
+    types.ts           # Tipos compartidos del feature
+  lib/
+    turnstile.ts       # Integración compartida con Cloudflare Turnstile
+  middleware.ts        # Autenticación, sesión KV, tenant isolation
   pages/
-    api/            # Endpoints REST (Astro API routes)
+    api/               # Endpoints REST (Astro API routes) — wrappers finos hacia spreadsheets/
       upload.ts
       export.ts
       ai/enrichment.ts
-    api/auth/       # Handlers OAuth (Google)
-  queue.ts          # Entry point del Worker consumer (no mover)
-  types/            # Tipos globales y extensión de Locals de Astro
+  platform/
+    cloudflare/
+      env.ts           # Acceso centralizado al runtime/bindings Cloudflare (cloudflareEnv)
+  queue.ts             # Entry point del Worker consumer (no mover)
+  types/               # Tipos globales y extensión de Locals de Astro
 workers/
-  enrichment-consumer/  # Worker standalone que consume la queue
+  enrichment-consumer/ # Worker standalone que consume la queue
     wrangler.toml
 docs/
-  architecture/     # Documentación de arquitectura por feature (ver más abajo)
+  architecture/        # Documentación de arquitectura por feature (ver más abajo)
   SETUP_LOCAL.md
   SETUP_CLOUDFLARE.md
   DEPLOY_CLOUDFLARE.md
-wrangler.toml       # Configuración Pages (prod + preview)
+wrangler.toml          # Configuración Pages (prod + preview)
 drizzle.config.ts
 ```
 
@@ -105,8 +116,9 @@ Cada feature tiene su propio documento en `docs/architecture/`. **Leer el doc re
 - **Sin instalar paquetes** sin confirmación explícita del usuario — consultar antes de agregar cualquier dependencia.
 - **TypeScript estricto**: no usar `as any`, no suprimir errores con `@ts-ignore` salvo justificación documentada.
 - **Aislamiento por tenant**: toda query a tablas operativas (`spreadsheets`, `spreadsheet_columns`, `row_entries`, `spreadsheet_enrichments`) debe incluir `eq(table.tenantId, tenantId)` como condición. Nunca omitir este filtro.
-- **API routes**: usar `src/lib/api-response.ts` (`json()`) para respuestas JSON consistentes.
+- **API routes**: usar `src/app/http/responses.ts` (`json()`) para respuestas JSON consistentes.
 - **Bindings opcionales**: diseñar código que tolere la ausencia de bindings (`AI`, `ENRICHMENT_QUEUE`, `SESSION_KV`) — ver tolerancia a fallos en el doc de despliegue.
+- **Acceso a bindings**: usar los adaptadores en `src/bindings/` (d1, r2, kv, ai, queue); nunca acceder a los bindings directamente desde fuera de esos módulos salvo en tests o entry points.
 - **Secrets**: nunca poner secretos en `wrangler.toml` (`[vars]` es texto plano). Usar `wrangler secret put` para producción y `.dev.vars` para desarrollo local.
 - **Migraciones**: al modificar `src/db/schema.ts`, siempre generar la migración con `npm run db:generate` y commitear los archivos de `migrations/`.
 

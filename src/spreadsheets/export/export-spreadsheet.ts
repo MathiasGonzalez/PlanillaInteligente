@@ -1,9 +1,10 @@
 import XlsxPopulate from 'xlsx-populate';
 import { and, asc, eq } from 'drizzle-orm';
-import { rowEntries, spreadsheetColumns, spreadsheets } from '../db/schema';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
-import type * as schema from '../db/schema';
-import { toMatrix } from './spreadsheet-matrix';
+import { rowEntries, spreadsheetColumns, spreadsheets } from '../../db/schema';
+import type * as schema from '../../db/schema';
+import { getObject } from '../../bindings/r2';
+import { toMatrix } from '../parsing/matrix';
 
 interface ExportSpreadsheetOptions {
   db: DrizzleD1Database<typeof schema>;
@@ -63,7 +64,7 @@ export async function exportSpreadsheetFromDatabase({
     throw new Error('Spreadsheet not found for the active tenant.');
   }
 
-  const templateFile = await bucket.get(spreadsheet.r2Key);
+  const templateFile = await getObject(bucket, spreadsheet.r2Key);
   if (!templateFile) {
     throw new Error('The base workbook could not be found in R2.');
   }
@@ -76,9 +77,7 @@ export async function exportSpreadsheetFromDatabase({
         columnIndex: spreadsheetColumns.columnIndex,
       })
       .from(spreadsheetColumns)
-      .where(
-        and(eq(spreadsheetColumns.tenantId, tenantId), eq(spreadsheetColumns.spreadsheetId, spreadsheetId)),
-      )
+      .where(and(eq(spreadsheetColumns.tenantId, tenantId), eq(spreadsheetColumns.spreadsheetId, spreadsheetId)))
       .orderBy(asc(spreadsheetColumns.columnIndex)),
     db
       .select({

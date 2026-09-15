@@ -1,16 +1,9 @@
 import XlsxPopulate from 'xlsx-populate';
-import { spreadsheetColumns, rowEntries } from '../db/schema';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
-import type * as schema from '../db/schema';
-import { toMatrix } from './spreadsheet-matrix';
-
-export type SpreadsheetColumnType = 'string' | 'number' | 'boolean' | 'date' | 'json';
-
-export interface ParsedSpreadsheetSummary {
-  sheetName: string;
-  columnsCount: number;
-  rowsCount: number;
-}
+import { rowEntries, spreadsheetColumns } from '../../db/schema';
+import type * as schema from '../../db/schema';
+import type { ParsedSpreadsheetSummary, SpreadsheetColumnType } from '../types';
+import { toMatrix } from './matrix';
 
 interface ParseSpreadsheetOptions {
   arrayBuffer: ArrayBuffer;

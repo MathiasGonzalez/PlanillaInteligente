@@ -1,9 +1,5 @@
 export function toMatrix(value: unknown): unknown[][] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  if (value.length === 0) {
+  if (!Array.isArray(value) || value.length === 0) {
     return [];
   }
 
