@@ -16,7 +16,6 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@planilla/spreadsheets": "*",
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
