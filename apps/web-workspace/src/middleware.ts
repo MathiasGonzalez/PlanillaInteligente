@@ -30,11 +30,10 @@ interface SessionCacheEntry {
 }
 
 const PUBLIC_PATH_PREFIXES = ['/login', '/api/auth', '/favicon', '/_astro'];
-const PUBLIC_PATHS = new Set(['/']);
 const SESSION_COOKIE_NAMES = ['session', 'session_token', 'authjs.session-token'];
 
 function isPublicRoute(pathname: string) {
-  return PUBLIC_PATHS.has(pathname) || PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return PUBLIC_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 function getSessionToken(cookies: AstroCookies) {

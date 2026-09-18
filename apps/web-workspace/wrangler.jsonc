@@ -9,6 +9,7 @@
   // See apps/web-workspace/.dev.vars.example for the full list of required local variables.
   "vars": {
     "GOOGLE_CLIENT_ID": "",
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
     "AI_GATEWAY_ID": ""
   },
@@ -22,6 +23,7 @@
       "binding": "DB",
       "database_name": "planilla-inteligente",
       "database_id": "replace-with-d1-database-id",
+      "preview_database_id": "planilla-inteligente-local",
       "migrations_dir": "../../migrations"
     }
   ],
@@ -58,6 +60,7 @@
     "preview": {
       "vars": {
         "GOOGLE_CLIENT_ID": "",
+        "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
         "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
         "AI_GATEWAY_ID": ""
       },
@@ -69,6 +72,7 @@
           "binding": "DB",
           "database_name": "planilla-inteligente-preview",
           "database_id": "replace-with-preview-d1-database-id",
+          "preview_database_id": "planilla-inteligente-preview-local",
           "migrations_dir": "../../migrations"
         }
       ],

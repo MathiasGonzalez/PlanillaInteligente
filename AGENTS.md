@@ -43,6 +43,7 @@ npm run build
 
 # Migraciones D1
 npm run db:generate     # genera SQL en migrations/ a partir de packages/cloudflare/src/d1/schema.ts
+npm run db:migrate:local    # aplica en D1 local (apps/web-workspace/.wrangler/state)
 npm run db:migrate      # aplica en producción
 npm run db:migrate:preview  # aplica en preview
 ```
@@ -150,6 +151,7 @@ Decidir en este orden:
 |----------|------|-------------|------------------|
 | `GOOGLE_CLIENT_ID` | pública | `apps/web-workspace/wrangler.jsonc` `vars` | mismo archivo `vars` |
 | `GOOGLE_CLIENT_SECRET` | **secret** | `apps/web-workspace/.dev.vars` | `wrangler secret put` |
+| `TURNSTILE_SITE_KEY` | pública | `wrangler.jsonc` `vars` / `.dev.vars` (test: `1x00000000000000000000AA`) | `wrangler.jsonc` `vars` |
 | `TURNSTILE_SECRET_KEY` | **secret** | `apps/web-workspace/.dev.vars` | `wrangler secret put` |
 | `WORKERS_AI_MODEL` | pública | `wrangler.jsonc` `vars` | `wrangler.jsonc` `vars` |
 | `AI_GATEWAY_ID` | pública | `wrangler.jsonc` `vars` | `wrangler.jsonc` `vars` |

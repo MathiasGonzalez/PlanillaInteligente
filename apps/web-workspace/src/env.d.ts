@@ -15,6 +15,7 @@ declare namespace Cloudflare {
     SESSION_KV?: KVNamespace;
     GOOGLE_CLIENT_ID: string;
     GOOGLE_CLIENT_SECRET: string;
+    TURNSTILE_SITE_KEY: string;
     TURNSTILE_SECRET_KEY: string;
     WORKERS_AI_MODEL?: string;
     AI_GATEWAY_ID?: string;

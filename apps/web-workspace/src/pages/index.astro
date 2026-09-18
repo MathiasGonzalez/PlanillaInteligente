@@ -1,0 +1,149 @@
+---
+import { desc, eq } from 'drizzle-orm';
+import { spreadsheets } from '@planilla/cloudflare/d1/schema';
+import { cloudflareEnv } from '@planilla/cloudflare/env';
+import { UploadForm } from '../components/spreadsheets/UploadForm';
+import WorkspaceLayout from '../layouts/WorkspaceLayout.astro';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+if (!user || !tenantId) {
+  return Astro.redirect('/login');
+}
+
+const rows = await Astro.locals.db
+  .select({
+    id: spreadsheets.id,
+    name: spreadsheets.name,
+    originalFilename: spreadsheets.originalFilename,
+    sheetName: spreadsheets.sheetName,
+  })
+  .from(spreadsheets)
+  .where(eq(spreadsheets.tenantId, tenantId))
+  .orderBy(desc(spreadsheets.createdAt));
+---
+
+<WorkspaceLayout title="Workspace — PlanillaInteligente" turnstile>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">PlanillaInteligente</p>
+        <h1>Workspace</h1>
+        <p class="muted">{user.email}</p>
+      </div>
+      <form method="post" action="/api/auth/signout">
+        <button type="submit">Cerrar sesión</button>
+      </form>
+    </header>
+
+    <section class="card">
+      <h2>Subir Excel</h2>
+      <UploadForm client:load siteKey={cloudflareEnv.TURNSTILE_SITE_KEY} />
+    </section>
+
+    <section class="card">
+      <h2>Planillas</h2>
+      {rows.length === 0 ? (
+        <p class="muted">Todavía no hay planillas. Subí un .xlsx para verla acá.</p>
+      ) : (
+        <ul class="sheet-list">
+          {rows.map((row) => (
+            <li>
+              <a href={`/spreadsheets/${row.id}`}>{row.name}</a>
+              <span class="muted">
+                {row.originalFilename}
+                {row.sheetName ? ` · ${row.sheetName}` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  </main>
+</WorkspaceLayout>
+
+<style>
+  .page {
+    max-width: 56rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .topbar,
+  .card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+  }
+
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  h1,
+  h2 {
+    margin: 0.15rem 0 0;
+  }
+
+  .eyebrow {
+    margin: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #0284c7;
+    font-weight: 600;
+  }
+
+  .muted {
+    color: #64748b;
+    font-size: 0.9rem;
+  }
+
+  button {
+    border: 1px solid #cbd5e1;
+    background: #0f172a;
+    color: #fff;
+    border-radius: 0.75rem;
+    padding: 0.55rem 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .sheet-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .sheet-list li {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  :global(.upload-form) {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  :global(.upload-label) {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  :global(.upload-error) {
+    margin: 0;
+    color: #be123c;
+    font-size: 0.9rem;
+  }
+</style>

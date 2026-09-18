@@ -1,0 +1,146 @@
+---
+import { and, asc, eq } from 'drizzle-orm';
+import { rowEntries, spreadsheetColumns, spreadsheets } from '@planilla/cloudflare/d1/schema';
+import WorkspaceLayout from '../../layouts/WorkspaceLayout.astro';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+if (!user || !tenantId) {
+  return Astro.redirect('/login');
+}
+
+const spreadsheetId = Astro.params.id;
+if (!spreadsheetId) {
+  return new Response('Not found', { status: 404 });
+}
+
+const [sheet] = await Astro.locals.db
+  .select()
+  .from(spreadsheets)
+  .where(and(eq(spreadsheets.id, spreadsheetId), eq(spreadsheets.tenantId, tenantId)))
+  .limit(1);
+
+if (!sheet) {
+  return new Response('Not found', { status: 404 });
+}
+
+const columns = await Astro.locals.db
+  .select()
+  .from(spreadsheetColumns)
+  .where(and(eq(spreadsheetColumns.spreadsheetId, spreadsheetId), eq(spreadsheetColumns.tenantId, tenantId)))
+  .orderBy(asc(spreadsheetColumns.columnIndex));
+
+const rows = await Astro.locals.db
+  .select()
+  .from(rowEntries)
+  .where(and(eq(rowEntries.spreadsheetId, spreadsheetId), eq(rowEntries.tenantId, tenantId)))
+  .orderBy(asc(rowEntries.rowIndex))
+  .limit(200);
+
+function formatCell(value: unknown) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  return JSON.stringify(value);
+}
+---
+
+<WorkspaceLayout title={`${sheet.name} — PlanillaInteligente`}>
+  <main class="page">
+    <p><a href="/">← Workspace</a></p>
+    <header class="card">
+      <h1>{sheet.name}</h1>
+      <p class="muted">
+        {sheet.originalFilename}
+        {sheet.sheetName ? ` · hoja ${sheet.sheetName}` : ''}
+        · {rows.length} filas
+      </p>
+      <p>
+        <a href={`/api/export?spreadsheetId=${sheet.id}`}>Descargar Excel</a>
+      </p>
+    </header>
+
+    <section class="card table-wrap">
+      {columns.length === 0 ? (
+        <p class="muted">Esta planilla no tiene columnas parseadas.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th>{column.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr>
+                {columns.map((column) => (
+                  <td>{formatCell(row.data[column.key])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  </main>
+</WorkspaceLayout>
+
+<style>
+  .page {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+    display: grid;
+    gap: 1rem;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+  }
+
+  h1 {
+    margin: 0 0 0.35rem;
+  }
+
+  .muted {
+    color: #64748b;
+  }
+
+  .table-wrap {
+    overflow: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  th,
+  td {
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 0.5rem 0.65rem;
+    white-space: nowrap;
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  th {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+  }
+</style>

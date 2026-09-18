@@ -1,0 +1,46 @@
+---
+interface Props {
+  title: string;
+  turnstile?: boolean;
+}
+
+const { title, turnstile = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {turnstile ? <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script> : null}
+    <style is:global>
+      :root {
+        color-scheme: light dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+
+      a {
+        color: #0369a1;
+      }
+    </style>
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

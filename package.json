@@ -17,7 +17,8 @@
     "test:local": "npm ci && npm run typecheck && npm run check && npm run build",
     "db:generate": "npm run db:generate -w @planilla/cloudflare",
     "db:migrate": "wrangler d1 migrations apply planilla-inteligente --remote --config apps/web-workspace/wrangler.jsonc",
-    "db:migrate:preview": "wrangler d1 migrations apply planilla-inteligente-preview --remote --config apps/web-workspace/wrangler.jsonc"
+    "db:migrate:preview": "wrangler d1 migrations apply planilla-inteligente-preview --remote --config apps/web-workspace/wrangler.jsonc",
+    "db:migrate:local": "wrangler d1 migrations apply planilla-inteligente --local --config apps/web-workspace/wrangler.jsonc --persist-to apps/web-workspace/.wrangler/state"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260915.1",

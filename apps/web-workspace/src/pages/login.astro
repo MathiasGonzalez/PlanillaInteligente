@@ -1,0 +1,35 @@
+---
+import { LoginCard } from '../components/auth/LoginCard';
+import { cloudflareEnv } from '@planilla/cloudflare/env';
+import WorkspaceLayout from '../layouts/WorkspaceLayout.astro';
+
+if (Astro.locals.user) {
+  return Astro.redirect('/');
+}
+
+const errorCode = Astro.url.searchParams.get('error');
+const errorMessages: Record<string, string> = {
+  turnstile: 'No pudimos validar Turnstile. Intentá de nuevo.',
+  config: 'Faltan GOOGLE_CLIENT_ID o GOOGLE_CLIENT_SECRET en .dev.vars.',
+  missing_code: 'Google no devolvió un código de autorización.',
+  invalid_state: 'El inicio de sesión expiró o el state no coincide. Intentá de nuevo.',
+  oauth_failed: 'No pudimos completar el login con Google.',
+};
+const error = errorCode ? errorMessages[errorCode] ?? 'No se pudo iniciar sesión.' : undefined;
+const siteKey = cloudflareEnv.TURNSTILE_SITE_KEY;
+---
+
+<WorkspaceLayout title="Iniciar sesión — PlanillaInteligente" turnstile>
+  <main class="login-shell">
+    <LoginCard siteKey={siteKey} error={error} />
+  </main>
+</WorkspaceLayout>
+
+<style>
+  .login-shell {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 2rem 1rem;
+  }
+</style>

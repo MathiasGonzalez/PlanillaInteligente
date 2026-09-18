@@ -12,3 +12,8 @@ export async function putKvJson(
   if (!kv) return;
   await kv.put(key, JSON.stringify(value), { expirationTtl: Math.max(60, ttlSeconds) });
 }
+
+export async function deleteKv(kv: KVNamespace | undefined, key: string): Promise<void> {
+  if (!kv) return;
+  await kv.delete(key);
+}
