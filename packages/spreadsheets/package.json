@@ -1,0 +1,22 @@
+{
+  "name": "@planilla/spreadsheets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./enrichment/service": "./src/enrichment/service.ts",
+    "./enrichment/types": "./src/enrichment/types.ts",
+    "./export/export-spreadsheet": "./src/export/export-spreadsheet.ts",
+    "./parsing/parse-workbook": "./src/parsing/parse-workbook.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "@planilla/cloudflare": "*",
+    "drizzle-orm": "0.45.2",
+    "xlsx-populate": "1.21.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260915.1",
+    "typescript": "5.9.2"
+  }
+}

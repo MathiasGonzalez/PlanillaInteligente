@@ -1,0 +1,27 @@
+{
+  "name": "@planilla/cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./ai": "./src/ai/index.ts",
+    "./d1": "./src/d1/index.ts",
+    "./d1/schema": "./src/d1/schema.ts",
+    "./env": "./src/env.ts",
+    "./kv": "./src/kv/index.ts",
+    "./queue": "./src/queue/index.ts",
+    "./r2": "./src/r2/index.ts"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@planilla/spreadsheets": "*",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260915.1",
+    "drizzle-kit": "0.31.10",
+    "typescript": "5.9.2"
+  }
+}

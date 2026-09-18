@@ -3,32 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "workers/*"
+  ],
   "scripts": {
-    "dev": "astro dev",
-    "build": "astro build",
-    "check": "astro check",
-    "typecheck": "tsc --noEmit",
+    "dev": "npm run dev -w @planilla/web-workspace",
+    "dev:landing": "npm run dev -w @planilla/web-landing",
+    "build": "npm run build -w @planilla/web-workspace && npm run build -w @planilla/web-landing",
+    "check": "npm run check -w @planilla/web-workspace",
+    "typecheck": "npm run typecheck -w @planilla/web-workspace && npm run typecheck -w @planilla/web-landing",
     "test:local": "npm ci && npm run typecheck && npm run check && npm run build",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply planilla-inteligente --remote",
-    "db:migrate:preview": "wrangler d1 migrations apply planilla-inteligente-preview --remote"
-  },
-  "dependencies": {
-    "@astrojs/cloudflare": "14.3.1",
-    "@astrojs/react": "6.0.5",
-    "astro": "7.3.2",
-    "drizzle-orm": "0.45.2",
-    "lucide-react": "1.46.0",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "xlsx-populate": "1.21.0"
+    "db:generate": "npm run db:generate -w @planilla/cloudflare",
+    "db:migrate": "wrangler d1 migrations apply planilla-inteligente --remote --config apps/web-workspace/wrangler.jsonc",
+    "db:migrate:preview": "wrangler d1 migrations apply planilla-inteligente-preview --remote --config apps/web-workspace/wrangler.jsonc"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.10",
     "@cloudflare/workers-types": "5.20260915.1",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "drizzle-kit": "0.31.10",
     "typescript": "5.9.2",
     "wrangler": "4.132.0"
   }

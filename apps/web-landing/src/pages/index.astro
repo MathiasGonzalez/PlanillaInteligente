@@ -1,0 +1,114 @@
+---
+const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
+---
+
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PlanillaInteligente — Subí tu Excel. Obtené tu app.</title>
+    <meta
+      name="description"
+      content="Transformá las planillas que ya usás en una aplicación web estructurada, multiusuario y lista para operar."
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #1c1917;
+        --muted: #57534e;
+        --paper: #faf7f2;
+        --line: #e7e0d6;
+        --accent: #0f766e;
+        --accent-hover: #0d5f59;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      main {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 2.5rem 1.25rem;
+      }
+
+      .panel {
+        width: min(40rem, 100%);
+      }
+
+      .eyebrow {
+        margin: 0 0 1rem;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.75rem;
+        font-weight: 650;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.4rem, 6vw, 3.6rem);
+        line-height: 1.05;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+      }
+
+      p {
+        margin: 1.25rem 0 0;
+        max-width: 34rem;
+        font-size: 1.125rem;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+
+      .cta {
+        display: inline-flex;
+        margin-top: 2rem;
+        padding: 0.85rem 1.35rem;
+        border-radius: 999px;
+        background: var(--accent);
+        color: white;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .cta:hover {
+        background: var(--accent-hover);
+      }
+
+      .cta:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <p class="eyebrow">PlanillaInteligente</p>
+        <h1>Subí tu Excel. Obtené tu app.</h1>
+        <p>
+          Convertí las planillas que ya usa tu negocio en una aplicación web
+          estructurada, multiusuario y lista para operar.
+        </p>
+        <a class="cta" href={appUrl}>Entrar al workspace</a>
+      </section>
+    </main>
+  </body>
+</html>

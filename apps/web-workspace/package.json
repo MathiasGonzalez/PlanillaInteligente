@@ -1,0 +1,31 @@
+{
+  "name": "@planilla/web-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "astro check",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "14.3.1",
+    "@astrojs/react": "6.0.5",
+    "@planilla/cloudflare": "*",
+    "@planilla/spreadsheets": "*",
+    "astro": "7.3.2",
+    "drizzle-orm": "0.45.2",
+    "lucide-react": "1.46.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@cloudflare/workers-types": "5.20260915.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "5.9.2",
+    "wrangler": "4.132.0"
+  }
+}

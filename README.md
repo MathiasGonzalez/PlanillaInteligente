@@ -1,53 +1,42 @@
 # PlanillaInteligente
-PlanillaInteligente - App saas que permite subir tus planillas o de tu empresa y convertirlas en apps (web) usables
 
-## Scripts
+SaaS que convierte planillas Excel en aplicaciones web usables.
 
-- `npm run test:local`: instala dependencias del lockfile y luego ejecuta typecheck, validación de Astro y build local.
+## Scripts (desde la raíz)
 
-## Deploy
-
-- GitHub Actions despliega a Cloudflare Pages según la rama:
-  - `main` o `master` -> `production`
-  - `dev` o `develop` -> `development`
-- Workflow: `.github/workflows/deploy-cloudflare-pages.yml`
-- El workflow valida antes de desplegar que los secretos requeridos de Cloudflare estén presentes.
-- Secretos a definir más adelante en GitHub:
-  - `CLOUDFLARE_API_TOKEN`
-  - `CLOUDFLARE_ACCOUNT_ID`
-  - `CLOUDFLARE_PAGES_PROJECT_NAME_PROD`
-  - `CLOUDFLARE_PAGES_PROJECT_NAME_DEV`
-- Secretos sensibles de Cloudflare/Runtime a cargar fuera del repo:
-  - `GOOGLE_CLIENT_SECRET`
-  - `TURNSTILE_SECRET_KEY`
+- `npm run dev` — workspace autenticado (`apps/web-workspace`, puerto 4321)
+- `npm run dev:landing` — landing de marketing (`apps/web-landing`, puerto 4322)
+- `npm run test:local` — `npm ci` + typecheck + Astro check + build de workspace y landing
+- `npm run build` — build de workspace y landing
+- `npm run db:generate` / `npm run db:migrate` / `npm run db:migrate:preview`
 
 ## Setup local
 
-- Documentación previa de arranque: `docs/SETUP_LOCAL.md`
-- El documento explica la validación local sin crear recursos en Cloudflare y la ruta para activar D1/KV/R2/Queue cuando se confirme el entorno real.
+1. `npm ci`
+2. Copiar `apps/web-workspace/.dev.vars.example` → `apps/web-workspace/.dev.vars` y completar secretos (no commitear `.dev.vars`).
+3. `npm run dev` para el workspace. Bindings de Cloudflare se simulan con `platformProxy`.
+4. `npm run dev:landing` para la landing. El CTA usa `PUBLIC_APP_URL` o, si no está, `http://localhost:4321`.
 
-## Deploy en Cloudflare
+El consumer de la queue no corre dentro de Pages. Vive en `workers/api-enrichment-consumer/`.
 
-- Arquitectura y vinculación de servicios: `docs/DEPLOY_CLOUDFLARE.md`
-- Explica cómo queda desplegada la app en Cloudflare y qué bindings usa en producción.
+## Deploy
 
-## AI enrichment
+GitHub Actions (`.github/workflows/deploy-cloudflare-pages.yml`):
 
-- El upload ahora dispara un enriquecimiento post-proceso sobre el esquema detectado de la planilla.
-- Bindings/vars de Cloudflare usados para esta etapa:
-  - `AI` (Workers AI binding)
-  - `ENRICHMENT_QUEUE` (Cloudflare Queue producer para procesamiento asíncrono)
-  - `WORKERS_AI_MODEL`
-  - `AI_GATEWAY_ID`
-- Si `ENRICHMENT_QUEUE` no está configurada o falla, el enriquecimiento cae en modo inline.
-- Si `AI` no está configurado o la inferencia falla, se guarda una configuración heurística multi-tenant como fallback.
-- Endpoint manual para reintentar o consultar la configuración IA:
-  - `GET /api/ai/enrichment?spreadsheetId=...`
-  - `POST /api/ai/enrichment` con `{ "spreadsheetId": "...", "mode": "inline|queue" }`
+- `main` / `master` → production
+- `dev` / `develop` → development
 
-- Queue consumer handler: `src/queue.ts`
+Secretos de GitHub:
 
-## Diagramas
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_PAGES_PROJECT_NAME_PROD`
+- `CLOUDFLARE_PAGES_PROJECT_NAME_DEV`
+- `CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_PROD`
+- `CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_DEV`
 
-- Flujo: `docs/flujo-app-generada.md`
-- Modelo de datos: `docs/modelo-datos.md`
+Secrets de runtime (fuera del repo): `GOOGLE_CLIENT_SECRET`, `TURNSTILE_SECRET_KEY`.
+
+El build de la landing puede recibir `PUBLIC_APP_URL` para apuntar el CTA al workspace de producción.
+
+Convenciones de código, layout y bindings: `AGENTS.md`. Definición de producto: `MVP.md`.
