@@ -18,7 +18,15 @@ jobs:
   deploy-prod:
     if: github.ref_name == 'main'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,58 +40,98 @@ jobs:
       - name: Install and validate project
         run: npm run test:local
 
+      - name: Setup Pulumi
+        uses: ./.github/actions/setup-pulumi
+
       - name: Validate required deploy secrets (production)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME_PROD: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_PROD }}
-          CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_PROD: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_PROD }}
         run: |
-          for secret_name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_PAGES_PROJECT_NAME_PROD CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_PROD; do
+          for secret_name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PULUMI_BACKEND_URL PULUMI_CONFIG_PASSPHRASE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
             if [ -z "${!secret_name}" ]; then
               echo "Missing required secret: ${secret_name}" >&2
               exit 1
             fi
           done
 
-      - name: Apply D1 migrations (production)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Apply Pulumi stack (prod)
+        working-directory: infra
         run: |
-          npx wrangler d1 migrations apply planilla-inteligente --remote --config apps/web-workspace/wrangler.jsonc
+          pulumi login "$PULUMI_BACKEND_URL"
+          pulumi stack select prod --non-interactive
+          pulumi up --yes --non-interactive --stack prod
+          pulumi stack output --json --stack prod > "$RUNNER_TEMP/stack.json"
+
+      - name: Apply Wrangler binding IDs from stack outputs
+        run: node infra/apply-bindings.mjs "$RUNNER_TEMP/stack.json"
+
+      - name: Apply D1 migrations (production)
+        run: |
+          D1_NAME="$(jq -r .d1DatabaseName "$RUNNER_TEMP/stack.json")"
+          npx wrangler d1 migrations apply "$D1_NAME" --remote --config apps/web-workspace/wrangler.jsonc
 
       - name: Deploy enrichment consumer Worker (production)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx wrangler deploy --config workers/api-enrichment-consumer/wrangler.jsonc
 
-      - name: Deploy workspace to Cloudflare Pages (production)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_PROD }}
+      - name: Deploy maintenance Worker (production)
         run: |
-          npx wrangler pages deploy ./apps/web-workspace/dist \
-            --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" \
-            --branch main
+          npx wrangler deploy --config workers/api-maintenance/wrangler.jsonc
+
+      - name: Deploy mailer Worker (optional)
+        id: mailer
+        continue-on-error: true
+        run: |
+          FROM="$(jq -r '.emailFromAddress // empty' "$RUNNER_TEMP/stack.json")"
+          if [ -z "$FROM" ]; then
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "Email sending is not configured. Skipping mailer."
+            exit 0
+          fi
+          if npx wrangler deploy --config workers/api-mailer/wrangler.jsonc; then
+            echo "deployed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "Mailer deploy failed. Email login will show an error. Continuing."
+            exit 1
+          fi
+
+      - name: Attach mailer binding when the worker exists
+        if: steps.mailer.outputs.deployed == 'true'
+        run: node infra/apply-bindings.mjs "$RUNNER_TEMP/stack.json" --with-mailer
+
+      - name: Deploy workspace to Cloudflare Pages (production)
+        working-directory: apps/web-workspace
+        run: |
+          PROJECT_NAME="$(jq -r .workspaceProjectName "$RUNNER_TEMP/stack.json")"
+          BRANCH="$(jq -r .pagesProductionBranch "$RUNNER_TEMP/stack.json")"
+          # Pages ignores --config/--env; it reads wrangler.jsonc from cwd and
+          # picks production vs preview from the project's production_branch.
+          npx wrangler pages deploy ./dist \
+            --project-name "$PROJECT_NAME" \
+            --branch "$BRANCH" \
+            --commit-dirty=true
 
       - name: Deploy landing to Cloudflare Pages (production)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_PROD }}
+        working-directory: apps/web-landing
         run: |
-          npx wrangler pages deploy ./apps/web-landing/dist \
-            --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" \
-            --branch main
+          PROJECT_NAME="$(jq -r .landingProjectName "$RUNNER_TEMP/stack.json")"
+          BRANCH="$(jq -r .pagesProductionBranch "$RUNNER_TEMP/stack.json")"
+          npx wrangler pages deploy ./dist \
+            --project-name "$PROJECT_NAME" \
+            --branch "$BRANCH" \
+            --commit-dirty=true
 
   deploy-dev:
     if: github.ref_name == 'develop'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment: development
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -97,50 +145,80 @@ jobs:
       - name: Install and validate project
         run: npm run test:local
 
+      - name: Setup Pulumi
+        uses: ./.github/actions/setup-pulumi
+
       - name: Validate required deploy secrets (development)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME_DEV: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_DEV }}
-          CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_DEV: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_DEV }}
         run: |
-          for secret_name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_PAGES_PROJECT_NAME_DEV CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_DEV; do
+          for secret_name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PULUMI_BACKEND_URL PULUMI_CONFIG_PASSPHRASE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
             if [ -z "${!secret_name}" ]; then
               echo "Missing required secret: ${secret_name}" >&2
               exit 1
             fi
           done
 
-      - name: Apply D1 migrations (preview)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Apply Pulumi stack (dev)
+        working-directory: infra
         run: |
-          npx wrangler d1 migrations apply planilla-inteligente-preview --remote --config apps/web-workspace/wrangler.jsonc
+          pulumi login "$PULUMI_BACKEND_URL"
+          pulumi stack select dev --non-interactive
+          pulumi up --yes --non-interactive --stack dev
+          pulumi stack output --json --stack dev > "$RUNNER_TEMP/stack.json"
+
+      - name: Apply Wrangler binding IDs from stack outputs
+        run: node infra/apply-bindings.mjs "$RUNNER_TEMP/stack.json"
+
+      - name: Apply D1 migrations (preview)
+        run: |
+          D1_NAME="$(jq -r .d1DatabaseName "$RUNNER_TEMP/stack.json")"
+          npx wrangler d1 migrations apply "$D1_NAME" --remote --config apps/web-workspace/wrangler.jsonc
 
       - name: Deploy enrichment consumer Worker (preview)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx wrangler deploy --config workers/api-enrichment-consumer/wrangler.jsonc --env preview
 
-      - name: Deploy workspace to Cloudflare Pages (development)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_DEV }}
+      - name: Deploy maintenance Worker (preview)
         run: |
-          npx wrangler pages deploy ./apps/web-workspace/dist \
-            --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" \
-            --branch dev
+          npx wrangler deploy --config workers/api-maintenance/wrangler.jsonc --env preview
+
+      - name: Deploy mailer Worker (optional)
+        id: mailer
+        continue-on-error: true
+        run: |
+          FROM="$(jq -r '.emailFromAddress // empty' "$RUNNER_TEMP/stack.json")"
+          if [ -z "$FROM" ]; then
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "Email sending is not configured. Skipping mailer."
+            exit 0
+          fi
+          if npx wrangler deploy --config workers/api-mailer/wrangler.jsonc --env preview; then
+            echo "deployed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deployed=false" >> "$GITHUB_OUTPUT"
+            echo "Mailer deploy failed. Email login will show an error. Continuing."
+            exit 1
+          fi
+
+      - name: Attach mailer binding when the worker exists
+        if: steps.mailer.outputs.deployed == 'true'
+        run: node infra/apply-bindings.mjs "$RUNNER_TEMP/stack.json" --with-mailer
+
+      - name: Deploy workspace to Cloudflare Pages (development)
+        working-directory: apps/web-workspace
+        run: |
+          PROJECT_NAME="$(jq -r .workspaceProjectName "$RUNNER_TEMP/stack.json")"
+          BRANCH="$(jq -r .pagesProductionBranch "$RUNNER_TEMP/stack.json")"
+          npx wrangler pages deploy ./dist \
+            --project-name "$PROJECT_NAME" \
+            --branch "$BRANCH" \
+            --commit-dirty=true
 
       - name: Deploy landing to Cloudflare Pages (development)
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_PAGES_PROJECT_NAME: ${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME_LANDING_DEV }}
+        working-directory: apps/web-landing
         run: |
-          npx wrangler pages deploy ./apps/web-landing/dist \
-            --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" \
-            --branch dev
+          PROJECT_NAME="$(jq -r .landingProjectName "$RUNNER_TEMP/stack.json")"
+          BRANCH="$(jq -r .pagesProductionBranch "$RUNNER_TEMP/stack.json")"
+          npx wrangler pages deploy ./dist \
+            --project-name "$PROJECT_NAME" \
+            --branch "$BRANCH" \
+            --commit-dirty=true

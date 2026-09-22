@@ -3,6 +3,7 @@ declare module 'xlsx-populate' {
     value(): unknown;
     value(nextValue: unknown): Cell;
     value(nextValue: unknown[][]): Cell;
+    formula(): string | undefined;
   }
 
   export interface Range {
@@ -16,7 +17,9 @@ declare module 'xlsx-populate' {
   }
 
   export interface Workbook {
+    sheets(): Sheet[];
     sheet(sheetNameOrIndex: string | number): Sheet | undefined;
+    addSheet(name: string): Sheet;
     outputAsync(
       typeOrOptions?: 'uint8array' | 'arraybuffer' | 'blob' | { type?: 'uint8array' | 'arraybuffer' | 'blob' },
     ): Promise<Uint8Array | ArrayBuffer | Blob>;
@@ -24,6 +27,7 @@ declare module 'xlsx-populate' {
 
   export interface XlsxPopulateStatic {
     fromDataAsync(data: ArrayBuffer | Uint8Array | Blob | Promise<unknown>): Promise<Workbook>;
+    fromBlankAsync(): Promise<Workbook>;
   }
 
   const XlsxPopulate: XlsxPopulateStatic;

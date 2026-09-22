@@ -18,14 +18,14 @@ export function UploadForm({ siteKey }: UploadFormProps): JSX.Element {
         method: 'POST',
         body: new FormData(event.currentTarget),
       });
-      const payload = (await response.json().catch(() => null)) as { spreadsheetId?: string; error?: string } | null;
+      const payload = (await response.json().catch(() => null)) as { appId?: string; error?: string } | null;
 
-      if (!response.ok || !payload?.spreadsheetId) {
+      if (!response.ok || !payload?.appId) {
         setError(payload?.error ?? 'No se pudo subir la planilla.');
         return;
       }
 
-      window.location.href = `/spreadsheets/${payload.spreadsheetId}`;
+      window.location.href = `/apps/${payload.appId}/setup`;
     } catch {
       setError('No se pudo subir la planilla.');
     } finally {
@@ -41,7 +41,7 @@ export function UploadForm({ siteKey }: UploadFormProps): JSX.Element {
       </label>
       <div className="cf-turnstile" data-sitekey={siteKey} data-theme="auto" />
       {error ? <p className="upload-error">{error}</p> : null}
-      <button type="submit" disabled={pending}>
+      <button className="cta" type="submit" disabled={pending}>
         {pending ? 'Subiendo…' : 'Subir planilla'}
       </button>
     </form>

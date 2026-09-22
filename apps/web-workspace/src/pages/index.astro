@@ -1,149 +1,111 @@
 ---
 import { desc, eq } from 'drizzle-orm';
-import { spreadsheets } from '@planilla/cloudflare/d1/schema';
+import { apps, organizations, workbooks } from '@planilla/cloudflare/d1/schema';
 import { cloudflareEnv } from '@planilla/cloudflare/env';
 import { UploadForm } from '../components/spreadsheets/UploadForm';
 import WorkspaceLayout from '../layouts/WorkspaceLayout.astro';
 
 const user = Astro.locals.user;
 const tenantId = Astro.locals.tenantId;
-if (!user || !tenantId) {
-  return Astro.redirect('/login');
-}
+if (!user || !tenantId) return Astro.redirect('/login');
+
+const [organization] = await Astro.locals.db
+  .select({ deactivatedAt: organizations.deactivatedAt })
+  .from(organizations)
+  .where(eq(organizations.id, tenantId))
+  .limit(1);
 
 const rows = await Astro.locals.db
   .select({
-    id: spreadsheets.id,
-    name: spreadsheets.name,
-    originalFilename: spreadsheets.originalFilename,
-    sheetName: spreadsheets.sheetName,
+    id: apps.id,
+    name: apps.name,
+    status: apps.status,
+    currentVersion: apps.currentVersion,
+    analysisStatus: workbooks.analysisStatus,
   })
-  .from(spreadsheets)
-  .where(eq(spreadsheets.tenantId, tenantId))
-  .orderBy(desc(spreadsheets.createdAt));
+  .from(apps)
+  .leftJoin(workbooks, eq(workbooks.id, apps.workbookId))
+  .where(eq(apps.tenantId, tenantId))
+  .orderBy(desc(apps.createdAt));
 ---
 
-<WorkspaceLayout title="Workspace — PlanillaInteligente" turnstile>
+<WorkspaceLayout title="Mis apps — PlanillaInteligente" turnstile>
   <main class="page">
-    <header class="topbar">
+    <header class="card topbar">
       <div>
         <p class="eyebrow">PlanillaInteligente</p>
-        <h1>Workspace</h1>
+        <h1>Mis apps</h1>
         <p class="muted">{user.email}</p>
       </div>
-      <form method="post" action="/api/auth/signout">
-        <button type="submit">Cerrar sesión</button>
-      </form>
+      <div class="actions">
+        {user.role === 'owner' ? <a class="button-secondary" href="/settings/members">Equipo</a> : null}
+        <form method="post" action="/api/auth/signout">
+          <button class="button-secondary" type="submit">Cerrar sesión</button>
+        </form>
+      </div>
     </header>
 
-    <section class="card">
-      <h2>Subir Excel</h2>
-      <UploadForm client:load siteKey={cloudflareEnv.TURNSTILE_SITE_KEY} />
-    </section>
+    {user.role === 'owner' ? (
+      <section class="card">
+        <h2>Subí un .xlsx para crear la primera</h2>
+        <p class="muted">No subas datos de salud, religión, política, afiliación sindical, vida sexual u origen étnico (art. 17, Ley 18.331).</p>
+        <UploadForm client:load siteKey={cloudflareEnv.TURNSTILE_SITE_KEY} />
+      </section>
+    ) : null}
+
+    {organization?.deactivatedAt ? (
+      <section class="card">
+        <h2>Workspace dado de baja</h2>
+        <p class="muted">Los datos se eliminan 30 días después de la baja. Podés borrar todo ahora si no querés esperar.</p>
+      </section>
+    ) : null}
 
     <section class="card">
-      <h2>Planillas</h2>
+      <h2>Apps</h2>
       {rows.length === 0 ? (
-        <p class="muted">Todavía no hay planillas. Subí un .xlsx para verla acá.</p>
+        <p class="muted">Todavía no hay apps. Subí un .xlsx para crear la primera.</p>
       ) : (
         <ul class="sheet-list">
-          {rows.map((row) => (
-            <li>
-              <a href={`/spreadsheets/${row.id}`}>{row.name}</a>
-              <span class="muted">
-                {row.originalFilename}
-                {row.sheetName ? ` · ${row.sheetName}` : ''}
-              </span>
-            </li>
-          ))}
+          {rows.map((row) => {
+            const href = row.currentVersion < 1 ? '/' : row.status === 'draft' ? `/apps/${row.id}/setup` : `/apps/${row.id}`;
+            return (
+              <li>
+                <a href={href}>{row.name}</a>
+                <span class="muted">
+                  {row.analysisStatus === 'failed' ? 'El análisis falló' : row.analysisStatus === 'pending' || row.analysisStatus === 'processing' ? 'Analizando…' : row.status === 'draft' ? 'Falta revisar' : 'Publicada'}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
+
+    {user.role === 'owner' ? (
+      <section class="card">
+        <h2>Datos de la cuenta</h2>
+        <p class="muted">Dar de baja conserva los datos 30 días. Borrar la cuenta elimina el workspace, las apps y la sesión de inmediato.</p>
+        <form method="post" action="/api/account">
+          <input type="hidden" name="mode" value="deactivate" />
+          <button class="button-secondary" type="submit">Dar de baja el workspace</button>
+        </form>
+        <form method="post" action="/api/account">
+          <input type="hidden" name="mode" value="erase" />
+          <button class="button-secondary" type="submit">Borrar cuenta y datos</button>
+        </form>
+      </section>
+    ) : null}
   </main>
 </WorkspaceLayout>
 
 <style>
-  .page {
-    max-width: 56rem;
-    margin: 0 auto;
-    padding: 2rem 1.25rem 4rem;
-    display: grid;
-    gap: 1.25rem;
-  }
-
-  .topbar,
-  .card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 1rem;
-    padding: 1.25rem 1.5rem;
-  }
-
-  .topbar {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  h1,
-  h2 {
-    margin: 0.15rem 0 0;
-  }
-
-  .eyebrow {
-    margin: 0;
-    font-size: 0.75rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: #0284c7;
-    font-weight: 600;
-  }
-
-  .muted {
-    color: #64748b;
-    font-size: 0.9rem;
-  }
-
-  button {
-    border: 1px solid #cbd5e1;
-    background: #0f172a;
-    color: #fff;
-    border-radius: 0.75rem;
-    padding: 0.55rem 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .sheet-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .sheet-list li {
-    display: grid;
-    gap: 0.15rem;
-  }
-
-  :global(.upload-form) {
-    display: grid;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
-  }
-
-  :global(.upload-label) {
-    display: grid;
-    gap: 0.35rem;
-    font-size: 0.9rem;
-    font-weight: 600;
-  }
-
-  :global(.upload-error) {
-    margin: 0;
-    color: #be123c;
-    font-size: 0.9rem;
-  }
+  .page { max-width: 56rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; display: grid; gap: 1.25rem; }
+  .topbar, .actions { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+  h1, h2 { margin: 0.15rem 0 0; }
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.25rem; }
+  .sheet-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+  .sheet-list li { display: grid; gap: 0.15rem; }
+  form { margin-top: 0.75rem; }
+  a.button-secondary { text-decoration: none; }
 </style>

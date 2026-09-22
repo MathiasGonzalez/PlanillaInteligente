@@ -1,0 +1,8 @@
+config:
+  planilla-inteligente-infra:wranglerTarget: production
+  planilla-inteligente-infra:pagesProductionBranch: main
+  # Email Sending is opt-in and needs the Workers Paid plan.
+  # Leave emailSendingEnabled unset so `pulumi up` does not call that API.
+  # planilla-inteligente-infra:emailSendingEnabled: true
+  # planilla-inteligente-infra:emailZoneName: example.com
+  # planilla-inteligente-infra:emailSendingSubdomain: mail.example.com

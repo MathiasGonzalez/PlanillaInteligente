@@ -14,6 +14,8 @@ export async function runAiInference(
   input: unknown,
   gatewayId?: string,
 ): Promise<unknown> {
-  const options = gatewayId ? { gateway: { id: gatewayId } } : undefined;
+  const options = gatewayId
+    ? { gateway: { id: gatewayId, collectLog: false } }
+    : undefined;
   return ai.run(model, input, options);
 }

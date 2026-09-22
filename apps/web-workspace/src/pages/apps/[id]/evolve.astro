@@ -1,0 +1,45 @@
+---
+import { and, desc, eq } from 'drizzle-orm';
+import { appSpecVersions } from '@planilla/cloudflare/d1/schema';
+import AppFrame from '../../../components/apps/AppFrame.astro';
+import EvolvePanel from '../../../components/apps/EvolvePanel';
+import WorkspaceLayout from '../../../layouts/WorkspaceLayout.astro';
+import { loadSpec } from '@planilla/apps/records';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+const appId = Astro.params.id;
+if (!user || !tenantId || !appId) return Astro.redirect('/login');
+if (user.role !== 'owner') return Astro.redirect(`/apps/${appId}`);
+const spec = await loadSpec(Astro.locals.db, tenantId, appId);
+if (!spec) return new Response('Not found', { status: 404 });
+const versions = await Astro.locals.db.select({
+  version: appSpecVersions.version,
+  source: appSpecVersions.source,
+}).from(appSpecVersions).where(and(eq(appSpecVersions.tenantId, tenantId), eq(appSpecVersions.appId, appId))).orderBy(desc(appSpecVersions.version));
+---
+<WorkspaceLayout title={`Instrucciones — ${spec.title}`}>
+  <main class="page">
+    <AppFrame appId={appId} spec={spec} owner={true} />
+    <section class="card">
+      <h2>Evolucionar la app</h2>
+      <p class="muted">La instrucción propone operaciones. Nada se aplica hasta que confirmes el diff.</p>
+      <EvolvePanel client:load appId={appId} />
+      <h3>Historial de versiones</h3>
+      <ul>
+        {versions.map((version) => (
+          <li>
+            v{version.version} · {version.source}
+            <form method="post" action={`/api/apps/${appId}/versions/${version.version}/restore`}>
+              <button class="button-secondary" type="submit">Restaurar spec</button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </section>
+  </main>
+</WorkspaceLayout>
+<style>
+  .page { max-width: 46rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
+  li { display: flex; gap: 0.75rem; align-items: center; margin: 0.4rem 0; }
+</style>

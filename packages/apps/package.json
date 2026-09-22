@@ -1,0 +1,25 @@
+{
+  "name": "@planilla/apps",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./spec": "./src/spec.ts",
+    "./generation": "./src/generation.ts",
+    "./records": "./src/records.ts",
+    "./dashboards": "./src/dashboards.ts",
+    "./evolution": "./src/evolution.ts",
+    "./members": "./src/members.ts",
+    "./retention": "./src/retention.ts",
+    "./jobs": "./src/jobs.ts"
+  },
+  "dependencies": {
+    "@planilla/cloudflare": "*",
+    "@planilla/spreadsheets": "*",
+    "drizzle-orm": "0.45.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260922.1",
+    "typescript": "5.9.3"
+  }
+}

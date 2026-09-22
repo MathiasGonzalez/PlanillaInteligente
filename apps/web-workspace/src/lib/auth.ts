@@ -3,8 +3,14 @@ import { and, eq } from 'drizzle-orm';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
 import { accounts, memberships, organizations, sessions, users } from '@planilla/cloudflare/d1/schema';
 import type * as schema from '@planilla/cloudflare/d1/schema';
+import { cloudflareEnv } from '@planilla/cloudflare/env';
 import { deleteKv, putKvJson } from '@planilla/cloudflare/kv';
-import type { SessionUser, UserSession } from '../middleware';
+import type { SessionCacheEntry, SessionUser, UserSession } from '../middleware';
+import { acceptInvitation } from '@planilla/apps/members';
+import { encryptSecret } from './token-cipher';
+
+export const PENDING_INVITE_COOKIE = 'pending_invite';
+export const EMAIL_CHALLENGE_COOKIE = 'email_challenge';
 
 export const SESSION_COOKIE_NAME = 'session';
 export const OAUTH_STATE_COOKIE = 'oauth_state';
@@ -62,7 +68,19 @@ function cookieOptions(secure: boolean, maxAgeSeconds: number) {
 }
 
 function isSecureRequest(url: URL) {
-  return url.protocol === 'https:';
+  return url.hostname !== 'localhost' && url.hostname !== '127.0.0.1' && url.hostname !== '[::1]';
+}
+
+async function encryptedOAuthTokens(profile: GoogleProfile) {
+  const key = cloudflareEnv.TOKEN_ENCRYPTION_KEY?.trim();
+  if (!key) {
+    throw new Error('TOKEN_ENCRYPTION_KEY is not configured.');
+  }
+
+  return {
+    accessToken: await encryptSecret(profile.accessToken, key),
+    refreshToken: profile.refreshToken ? await encryptSecret(profile.refreshToken, key) : null,
+  };
 }
 
 function base64UrlEncode(bytes: Uint8Array) {
@@ -215,78 +233,68 @@ async function uniqueOrganizationSlug(db: AppDatabase, base: string) {
   return `${slugBase}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-export async function upsertGoogleUser(
+async function loadSessionUser(db: AppDatabase, userId: string, tenantId: string): Promise<SessionUser> {
+  const [user] = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      image: users.image,
+      defaultOrganizationId: users.defaultOrganizationId,
+      role: memberships.role,
+    })
+    .from(users)
+    .innerJoin(memberships, and(eq(memberships.userId, users.id), eq(memberships.organizationId, tenantId)))
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!user) throw new Error('Failed to load authenticated user.');
+  return user;
+}
+
+export async function resolveUserAndTenant(
   db: AppDatabase,
-  profile: GoogleProfile,
+  identity: { email: string; name: string | null; image: string | null },
+  inviteToken: string | null,
 ): Promise<{ user: SessionUser; tenantId: string }> {
   const now = new Date();
-  const [existingAccount] = await db
-    .select({
-      userId: accounts.userId,
-      tenantId: accounts.tenantId,
-    })
-    .from(accounts)
-    .where(and(eq(accounts.provider, 'google'), eq(accounts.providerAccountId, profile.providerAccountId)))
-    .limit(1);
-
-  let userId: string | null = existingAccount?.userId ?? null;
-  let tenantId: string | null = existingAccount?.tenantId ?? null;
-
-  if (!userId) {
-    const [existingUser] = await db.select().from(users).where(eq(users.email, profile.email)).limit(1);
-    userId = existingUser?.id ?? crypto.randomUUID();
-
-    if (existingUser) {
-      await db
-        .update(users)
-        .set({
-          name: profile.name ?? existingUser.name,
-          image: profile.image ?? existingUser.image,
-          emailVerifiedAt: now,
-          updatedAt: now,
-        })
-        .where(eq(users.id, userId));
-      tenantId = existingUser.defaultOrganizationId;
-    } else {
-      await db.insert(users).values({
-        id: userId,
-        email: profile.email,
-        name: profile.name,
-        image: profile.image,
-        emailVerifiedAt: now,
-      });
-    }
+  const [existingUser] = await db.select().from(users).where(eq(users.email, identity.email)).limit(1);
+  const userId = existingUser?.id ?? crypto.randomUUID();
+  if (existingUser) {
+    await db.update(users).set({
+      name: identity.name ?? existingUser.name,
+      image: identity.image ?? existingUser.image,
+      emailVerifiedAt: now,
+      updatedAt: now,
+    }).where(eq(users.id, userId));
   } else {
-    await db
-      .update(users)
-      .set({
-        name: profile.name,
-        image: profile.image,
-        emailVerifiedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(users.id, userId));
+    await db.insert(users).values({
+      id: userId,
+      email: identity.email,
+      name: identity.name,
+      image: identity.image,
+      emailVerifiedAt: now,
+    });
   }
 
-  if (!userId) {
-    throw new Error('Failed to resolve Google user id.');
+  if (inviteToken) {
+    const accepted = await acceptInvitation(db, { token: inviteToken, userId });
+    if (accepted) {
+      return { user: await loadSessionUser(db, userId, accepted.tenantId), tenantId: accepted.tenantId };
+    }
   }
 
-  if (!tenantId) {
-    const [membership] = await db
-      .select({ organizationId: memberships.organizationId })
-      .from(memberships)
-      .where(eq(memberships.userId, userId))
-      .limit(1);
-    tenantId = membership?.organizationId ?? null;
-  }
-
+  const [membership] = await db
+    .select({ organizationId: memberships.organizationId })
+    .from(memberships)
+    .where(eq(memberships.userId, userId))
+    .limit(1);
+  let tenantId = existingUser?.defaultOrganizationId ?? membership?.organizationId ?? null;
   if (!tenantId) {
     tenantId = crypto.randomUUID();
-    const slug = await uniqueOrganizationSlug(db, profile.email.split('@')[0] ?? 'workspace');
+    const slug = await uniqueOrganizationSlug(db, identity.email.split('@')[0] ?? 'workspace');
     await db.insert(organizations).values({
       id: tenantId,
-      name: profile.name ? `Workspace de ${profile.name}` : `Workspace de ${profile.email}`,
+      name: identity.name ? `Workspace de ${identity.name}` : `Workspace de ${identity.email}`,
       slug,
       ownerUserId: userId,
     });
@@ -298,13 +306,32 @@ export async function upsertGoogleUser(
     });
     await db.update(users).set({ defaultOrganizationId: tenantId, updatedAt: now }).where(eq(users.id, userId));
   }
+  return { user: await loadSessionUser(db, userId, tenantId), tenantId };
+}
+
+export async function upsertGoogleUser(
+  db: AppDatabase,
+  profile: GoogleProfile,
+  inviteToken: string | null,
+): Promise<{ user: SessionUser; tenantId: string }> {
+  const now = new Date();
+  const resolved = await resolveUserAndTenant(db, profile, inviteToken);
+  const userId = resolved.user.id;
+  const tenantId = resolved.tenantId;
+  const [existingAccount] = await db
+    .select({ userId: accounts.userId })
+    .from(accounts)
+    .where(and(eq(accounts.provider, 'google'), eq(accounts.providerAccountId, profile.providerAccountId)))
+    .limit(1);
+
+  const tokens = await encryptedOAuthTokens(profile);
 
   if (existingAccount) {
     await db
       .update(accounts)
       .set({
-        accessToken: profile.accessToken,
-        refreshToken: profile.refreshToken,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
         tokenType: profile.tokenType,
         scope: profile.scope,
         expiresAt: profile.expiresAt,
@@ -319,43 +346,15 @@ export async function upsertGoogleUser(
       tenantId,
       provider: 'google',
       providerAccountId: profile.providerAccountId,
-      accessToken: profile.accessToken,
-      refreshToken: profile.refreshToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       tokenType: profile.tokenType,
       scope: profile.scope,
       expiresAt: profile.expiresAt,
     });
   }
 
-  const [user] = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      image: users.image,
-      defaultOrganizationId: users.defaultOrganizationId,
-      role: memberships.role,
-    })
-    .from(users)
-    .innerJoin(memberships, and(eq(memberships.userId, users.id), eq(memberships.organizationId, tenantId)))
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (!user) {
-    throw new Error('Failed to load authenticated user after Google upsert.');
-  }
-
-  return {
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
-      defaultOrganizationId: user.defaultOrganizationId,
-      role: user.role,
-    },
-    tenantId,
-  };
+  return resolved;
 }
 
 export async function createUserSession(
@@ -386,10 +385,18 @@ export async function createUserSession(
 
   cookies.set(SESSION_COOKIE_NAME, sessionToken, cookieOptions(isSecureRequest(url), Math.floor(SESSION_TTL_MS / 1000)));
 
+  const cacheEntry: SessionCacheEntry = {
+    tenantId,
+    userId: user.id,
+    role: user.role,
+    sessionId: session.id,
+    expiresAt: session.expiresAt,
+  };
+
   await putKvJson(
     kv,
     `session:${sessionToken}`,
-    { tenantId, user, session },
+    cacheEntry,
     Math.floor(SESSION_TTL_MS / 1000),
   );
 }

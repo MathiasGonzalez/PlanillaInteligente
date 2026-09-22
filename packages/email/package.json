@@ -1,0 +1,18 @@
+{
+  "name": "@planilla/email",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./login-code": "./src/login-code.tsx"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-email": "6.9.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "typescript": "5.9.3"
+  }
+}

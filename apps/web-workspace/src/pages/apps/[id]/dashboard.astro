@@ -1,0 +1,50 @@
+---
+import AppFrame from '../../../components/apps/AppFrame.astro';
+import WorkspaceLayout from '../../../layouts/WorkspaceLayout.astro';
+import { loadSpec } from '@planilla/apps/records';
+import { aggregateWidget } from '@planilla/apps/dashboards';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+const appId = Astro.params.id;
+if (!user || !tenantId || !appId) return Astro.redirect('/login');
+const spec = await loadSpec(Astro.locals.db, tenantId, appId);
+if (!spec) return new Response('Not found', { status: 404 });
+const widgets = await Promise.all((spec.dashboards[0]?.widgets ?? []).map(async (widget) => ({
+  widget,
+  points: await aggregateWidget(Astro.locals.db, tenantId, appId, widget),
+})));
+const max = Math.max(1, ...widgets.flatMap((item) => item.points.map((point) => point.value)));
+---
+<WorkspaceLayout title={`Resumen — ${spec.title}`}>
+  <main class="page">
+    <AppFrame appId={appId} spec={spec} current="dashboard" owner={user.role === 'owner'} />
+    <section class="widgets">
+      {widgets.map(({ widget, points }) => (
+        <article class="card">
+          <h2>{widget.title}</h2>
+          {widget.type === 'kpi' ? <p class="kpi">{points[0]?.value ?? 0}</p> : (
+            <svg viewBox="0 0 320 140" role="img">
+              {points.map((point, index) => {
+                const width = widget.type === 'bar' ? 28 : 8;
+                const gap = 320 / Math.max(points.length, 1);
+                const height = (point.value / max) * 100;
+                const x = index * gap + 8;
+                return widget.type === 'line'
+                  ? <circle cx={x} cy={120 - height} r="4" fill="var(--accent)"><title>{point.label}: {point.value}</title></circle>
+                  : <rect x={x} y={120 - height} width={width} height={height} fill="var(--accent)"><title>{point.label}: {point.value}</title></rect>;
+              })}
+            </svg>
+          )}
+          <ul>{points.map((point) => <li>{point.label}: {point.value}</li>)}</ul>
+        </article>
+      ))}
+    </section>
+  </main>
+</WorkspaceLayout>
+<style>
+  .page { max-width: 72rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
+  .widgets { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+  .kpi { font-size: 2.4rem; margin: 0; }
+  svg { width: 100%; height: auto; }
+</style>

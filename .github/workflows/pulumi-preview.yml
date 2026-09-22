@@ -1,0 +1,66 @@
+name: Pulumi preview
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "infra/**"
+      - ".github/workflows/pulumi-preview.yml"
+      - ".github/actions/setup-pulumi/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pulumi-preview-${{ github.base_ref }}-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ github.base_ref == 'main' && 'production' || 'development' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PULUMI_BACKEND_URL: ${{ secrets.PULUMI_BACKEND_URL }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Setup Pulumi
+        uses: ./.github/actions/setup-pulumi
+
+      - name: Validate required Pulumi secrets
+        run: |
+          for secret_name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID PULUMI_BACKEND_URL PULUMI_CONFIG_PASSPHRASE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+            if [ -z "${!secret_name}" ]; then
+              echo "Missing required secret: ${secret_name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Pulumi preview
+        working-directory: infra
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            STACK=prod
+          else
+            STACK=dev
+          fi
+          echo "Previewing stack ${STACK} (base branch ${{ github.base_ref }})"
+          pulumi login "$PULUMI_BACKEND_URL"
+          pulumi stack select "$STACK" --non-interactive
+          pulumi preview --non-interactive --diff --stack "$STACK"

@@ -1,0 +1,105 @@
+---
+import AppFrame from '../../../../components/apps/AppFrame.astro';
+import WorkspaceLayout from '../../../../layouts/WorkspaceLayout.astro';
+import { displayFields, getRecord, loadSpec, recordHistory, relatedRecords } from '@planilla/apps/records';
+import { entityOf } from '@planilla/apps/spec';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+const { id: appId, entity: entityKey, recordId } = Astro.params;
+if (!user || !tenantId || !appId || !entityKey || !recordId) return Astro.redirect('/login');
+const spec = await loadSpec(Astro.locals.db, tenantId, appId);
+const entity = spec ? entityOf(spec, entityKey) : null;
+const row = await getRecord(Astro.locals.db, tenantId, appId, recordId);
+if (!spec || !entity || !row || row.entityKey !== entityKey) return new Response('Not found', { status: 404 });
+const fields = displayFields(entity);
+const history = await recordHistory(Astro.locals.db, tenantId, appId, recordId);
+const incoming = await relatedRecords(Astro.locals.db, tenantId, appId, spec, entityKey, recordId);
+const outgoing = spec.relations.filter((relation) => relation.fromEntity === entityKey);
+const statusKey = entity.statusFieldKey;
+const statusOptions = statusKey ? (entity.fields.find((field) => field.key === statusKey)?.options ?? []) : [];
+const currentStatus = statusKey ? String(row.data[statusKey] ?? '') : '';
+---
+<WorkspaceLayout title={`${entity.name} — ${spec.title}`}>
+  <main class="page">
+    <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
+    <p><a href={`/apps/${appId}/${entity.key}`}>← Volver a la lista</a></p>
+    <section class="card">
+      <h2>{String(row.data[entity.primaryFieldKey ?? ''] ?? 'Registro')}</h2>
+      <dl>
+        {fields.map((field) => {
+          const value = row.data[field.key];
+          const relation = outgoing.find((item) => item.fieldKey === field.key);
+          return (
+            <div>
+              <dt>{field.label}</dt>
+              <dd>
+                {relation && typeof value === 'string' && value
+                  ? <a href={`/apps/${appId}/${relation.toEntity}/${value}`}>{value}</a>
+                  : String(value ?? '')}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
+      {statusKey ? (
+        <form class="status" id="status-form">
+          <label>
+            Estado
+            <select name="status">
+              {statusOptions.map((option) => (
+                <option value={option} selected={option === currentStatus}>{option}</option>
+              ))}
+            </select>
+          </label>
+          <button class="button-secondary" type="button" id="save-status" data-app={appId} data-record={recordId} data-field={statusKey}>Guardar estado</button>
+        </form>
+      ) : null}
+      <p class="actions">
+        <a class="cta" href={`/apps/${appId}/${entity.key}/${recordId}/edit`}>Editar</a>
+        <button class="button-secondary" type="button" id="delete-record" data-app={appId} data-entity={entity.key} data-record={recordId}>Borrar</button>
+      </p>
+    </section>
+    {incoming.map((group) => (
+      <section class="card">
+        <h2>{spec.entities.find((item) => item.key === group.relation.fromEntity)?.name}</h2>
+        <ul>
+          {group.rows.map((item) => <li><a href={`/apps/${appId}/${group.relation.fromEntity}/${item.id}`}>{item.id}</a></li>)}
+        </ul>
+      </section>
+    ))}
+    <section class="card">
+      <h2>Historial</h2>
+      {history.length === 0 ? <p class="muted">Todavía no hay cambios.</p> : (
+        <ul>{history.map((change) => <li>{change.op} · {change.createdAt.toISOString()}</li>)}</ul>
+      )}
+    </section>
+  </main>
+</WorkspaceLayout>
+<script>
+  const statusButton = document.querySelector<HTMLButtonElement>('#save-status');
+  statusButton?.addEventListener('click', async () => {
+    const select = document.querySelector('select[name="status"]');
+    if (!statusButton.dataset.app || !statusButton.dataset.field || !(select instanceof HTMLSelectElement)) return;
+    await fetch(`/api/apps/${statusButton.dataset.app}/records/${statusButton.dataset.record}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { [statusButton.dataset.field]: select.value } }),
+    });
+    window.location.reload();
+  });
+  const deleteButton = document.querySelector<HTMLButtonElement>('#delete-record');
+  deleteButton?.addEventListener('click', async () => {
+    if (!deleteButton.dataset.app || !confirm('¿Borrar este registro?')) return;
+    await fetch(`/api/apps/${deleteButton.dataset.app}/records/${deleteButton.dataset.record}`, { method: 'DELETE' });
+    window.location.href = `/apps/${deleteButton.dataset.app}/${deleteButton.dataset.entity}`;
+  });
+</script>
+<style>
+  .page { max-width: 40rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
+  dl { display: grid; gap: 0.6rem; }
+  dt { font-family: var(--sans); font-size: 0.75rem; text-transform: uppercase; color: var(--muted); }
+  dd { margin: 0; }
+  .actions { display: flex; gap: 0.5rem; }
+  h2 { margin-top: 0; }
+</style>

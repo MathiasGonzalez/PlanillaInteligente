@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "npm run dev -w @planilla/web-workspace",
     "dev:landing": "npm run dev -w @planilla/web-landing",
+    "dev:mailer": "npm run dev -w @planilla/api-mailer",
     "build": "npm run build -w @planilla/web-workspace && npm run build -w @planilla/web-landing",
     "check": "npm run check -w @planilla/web-workspace",
     "typecheck": "npm run typecheck -w @planilla/web-workspace && npm run typecheck -w @planilla/web-landing",
@@ -21,8 +22,8 @@
     "db:migrate:local": "wrangler d1 migrations apply planilla-inteligente --local --config apps/web-workspace/wrangler.jsonc --persist-to apps/web-workspace/.wrangler/state"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260915.1",
-    "typescript": "5.9.2",
-    "wrangler": "4.132.0"
+    "@cloudflare/workers-types": "5.20260922.1",
+    "typescript": "^5.9.3",
+    "wrangler": "4.136.2"
   }
 }

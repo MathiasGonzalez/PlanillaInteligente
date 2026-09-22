@@ -41,7 +41,9 @@ export const GET: APIRoute = async ({ url, cookies, redirect, locals }) => {
   }
 
   try {
-    const { user, tenantId } = await upsertGoogleUser(locals.db, profile);
+    const inviteToken = cookies.get('pending_invite')?.value ?? null;
+    const { user, tenantId } = await upsertGoogleUser(locals.db, profile, inviteToken);
+    cookies.delete('pending_invite', { path: '/' });
     await createUserSession(locals.db, cloudflareEnv.SESSION_KV, cookies, url, user, tenantId);
   } catch {
     return redirect('/login?error=oauth_failed');

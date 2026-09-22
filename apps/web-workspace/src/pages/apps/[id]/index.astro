@@ -1,0 +1,15 @@
+---
+import { loadApp, loadSpec } from '@planilla/apps/records';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+const appId = Astro.params.id;
+if (!user || !tenantId || !appId) return Astro.redirect('/login');
+const app = await loadApp(Astro.locals.db, tenantId, appId);
+if (!app) return new Response('Not found', { status: 404 });
+if (app.status === 'draft' || app.currentVersion < 1) return Astro.redirect(`/apps/${appId}/setup`);
+const spec = await loadSpec(Astro.locals.db, tenantId, appId);
+const first = spec?.entities[0];
+if (!first) return Astro.redirect(`/apps/${appId}/setup`);
+return Astro.redirect(`/apps/${appId}/${first.key}`);
+---

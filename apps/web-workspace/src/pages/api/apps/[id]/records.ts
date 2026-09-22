@@ -1,0 +1,54 @@
+import type { APIRoute } from 'astro';
+import { requireUser } from '../../../../lib/access';
+import { fail, json } from '../../../../app/http/responses';
+import { createRecord, listRecords, loadSpec, RecordValidationError, searchRelationOptions } from '@planilla/apps/records';
+import { entityOf } from '@planilla/apps/spec';
+
+export const GET: APIRoute = async ({ locals, params, url }) => {
+  const session = requireUser(locals);
+  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const spec = await loadSpec(locals.db, session.tenantId, params.id);
+  const entityKey = url.searchParams.get('entity') ?? '';
+  const entity = spec ? entityOf(spec, entityKey) : null;
+  if (!spec || !entity) return json({ error: 'Not found' }, 404);
+  if (url.searchParams.get('options') === '1') {
+    const options = await searchRelationOptions(locals.db, session.tenantId, params.id, entity, url.searchParams.get('q') ?? '');
+    return json({ options });
+  }
+  const filters = url.searchParams.get('filterField') && url.searchParams.get('filterValue')
+    ? [{ fieldKey: url.searchParams.get('filterField') ?? '', op: 'eq' as const, value: url.searchParams.get('filterValue') ?? '' }]
+    : [];
+  const page = await listRecords(locals.db, {
+    tenantId: session.tenantId,
+    appId: params.id,
+    entityKey,
+    search: url.searchParams.get('q') ?? undefined,
+    filters,
+    sortField: url.searchParams.get('sort'),
+    sortDirection: url.searchParams.get('dir') === 'desc' ? 'desc' : 'asc',
+    cursor: url.searchParams.get('cursor'),
+  });
+  return json(page);
+};
+
+export const POST: APIRoute = async ({ locals, params, request }) => {
+  const session = requireUser(locals);
+  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const spec = await loadSpec(locals.db, session.tenantId, params.id);
+  const body = await request.json().catch(() => null) as { entityKey?: string; data?: Record<string, unknown> } | null;
+  const entity = spec && body?.entityKey ? entityOf(spec, body.entityKey) : null;
+  if (!entity || !body?.data) return json({ error: 'Not found' }, 404);
+  try {
+    const id = await createRecord(locals.db, {
+      tenantId: session.tenantId,
+      appId: params.id,
+      entity,
+      userId: session.user.id,
+      input: body.data,
+    });
+    return json({ id }, 201);
+  } catch (error) {
+    if (error instanceof RecordValidationError) return json({ error: error.message }, 400);
+    return fail(500);
+  }
+};

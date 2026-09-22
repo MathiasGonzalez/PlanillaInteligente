@@ -1,0 +1,12 @@
+---
+const token = Astro.params.token;
+if (!token) return new Response('Not found', { status: 404 });
+Astro.cookies.set('pending_invite', token, {
+  httpOnly: true,
+  path: '/',
+  sameSite: 'lax',
+  secure: Astro.url.hostname !== 'localhost',
+  maxAge: 7 * 24 * 60 * 60,
+});
+return Astro.redirect('/login');
+---

@@ -1,0 +1,8 @@
+config:
+  planilla-inteligente-infra:nameSuffix: "-preview"
+  planilla-inteligente-infra:pagesNameSuffix: "-dev"
+  planilla-inteligente-infra:wranglerTarget: preview
+  planilla-inteligente-infra:pagesProductionBranch: dev
+  # planilla-inteligente-infra:emailSendingEnabled: true
+  # planilla-inteligente-infra:emailZoneName: example.com
+  # planilla-inteligente-infra:emailSendingSubdomain: mail-dev.example.com

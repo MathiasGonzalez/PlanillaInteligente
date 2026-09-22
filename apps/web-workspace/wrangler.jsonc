@@ -11,7 +11,8 @@
     "GOOGLE_CLIENT_ID": "",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
-    "AI_GATEWAY_ID": ""
+    "AI_GATEWAY_ID": "",
+    "ANALYSIS_MODE": "queue"
   },
 
   "ai": {
@@ -22,6 +23,7 @@
     {
       "binding": "DB",
       "database_name": "planilla-inteligente",
+      // Placeholder. CI fills this from Pulumi stack output (do not commit real IDs).
       "database_id": "replace-with-d1-database-id",
       "preview_database_id": "planilla-inteligente-local",
       "migrations_dir": "../../migrations"
@@ -31,6 +33,7 @@
   "kv_namespaces": [
     {
       "binding": "SESSION_KV",
+      // Placeholder. CI fills this from Pulumi stack output (do not commit real IDs).
       "id": "replace-with-kv-namespace-id"
     }
   ],
@@ -38,7 +41,8 @@
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "planilla-inteligente-assets"
+      "bucket_name": "planilla-inteligente-assets",
+      "jurisdiction": "eu"
     }
   ],
 
@@ -53,6 +57,9 @@
     ]
   },
 
+  // MAILER no está en este archivo. CI lo agrega solo si el worker de correo
+  // llegó a desplegarse. Sin plan Paid, o en local, Pages no depende de ese worker.
+
   // Preview environment — uses separate resources to avoid touching production data.
   // Per Pages docs: when any non-inheritable key is overridden for an environment,
   // ALL non-inheritable keys must be specified in that environment block.
@@ -62,7 +69,8 @@
         "GOOGLE_CLIENT_ID": "",
         "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
         "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
-        "AI_GATEWAY_ID": ""
+        "AI_GATEWAY_ID": "",
+        "ANALYSIS_MODE": "queue"
       },
       "ai": {
         "binding": "AI"
@@ -71,6 +79,7 @@
         {
           "binding": "DB",
           "database_name": "planilla-inteligente-preview",
+          // Placeholder. CI fills this from Pulumi stack output (do not commit real IDs).
           "database_id": "replace-with-preview-d1-database-id",
           "preview_database_id": "planilla-inteligente-preview-local",
           "migrations_dir": "../../migrations"
@@ -79,13 +88,15 @@
       "kv_namespaces": [
         {
           "binding": "SESSION_KV",
+          // Placeholder. CI fills this from Pulumi stack output (do not commit real IDs).
           "id": "replace-with-preview-kv-namespace-id"
         }
       ],
       "r2_buckets": [
         {
           "binding": "BUCKET",
-          "bucket_name": "planilla-inteligente-assets-preview"
+          "bucket_name": "planilla-inteligente-assets-preview",
+          "jurisdiction": "eu"
         }
       ],
       "queues": {
