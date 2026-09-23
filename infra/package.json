@@ -1,0 +1,15 @@
+{
+  "name": "planilla-inteligente-infra",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "workspaces": [],
+  "dependencies": {
+    "@pulumi/cloudflare": "^6.21.0",
+    "@pulumi/pulumi": "^3.263.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.6",
+    "typescript": "5.9.3"
+  }
+}

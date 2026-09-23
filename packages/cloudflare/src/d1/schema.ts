@@ -1,71 +1,24 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export const SPREADSHEET_VIEW_TYPES = ['table', 'form', 'kanban', 'dashboard'] as const;
-export const SPREADSHEET_ENRICHMENT_STATUSES = ['pending', 'processing', 'completed', 'failed'] as const;
-export const SPREADSHEET_ENRICHMENT_PROVIDERS = ['heuristic', 'workers-ai'] as const;
-export const SPREADSHEET_TRIGGER_SOURCES = ['upload', 'manual'] as const;
-export const SPREADSHEET_SEMANTIC_TYPES = [
-  'text',
-  'long-text',
-  'identifier',
-  'name',
-  'email',
-  'amount',
-  'status',
-  'date',
-  'category',
-  'assignee',
-  'phone',
-  'url',
-  'boolean',
-  'number',
-  'sensitive',
-  'unknown',
-] as const;
+export const APP_STATUSES = ['draft', 'published'] as const;
+export const ANALYSIS_STATUSES = ['pending', 'processing', 'completed', 'failed'] as const;
+export const SPEC_SOURCES = ['heuristic', 'ai', 'wizard', 'instruction', 'restore'] as const;
+export const RECORD_OPS = ['create', 'update', 'delete'] as const;
+export const PROPOSAL_STATUSES = ['pending', 'processing', 'applied', 'rejected', 'failed', 'stale'] as const;
+export const MEMBERSHIP_ROLES = ['owner', 'member'] as const;
+export const AI_USAGE_KINDS = ['analyze', 'evolve'] as const;
+export const BILLING_PLANS = ['free', 'paid'] as const;
+export const BILLING_STATUSES = ['none', 'pending', 'authorized', 'paused', 'cancelled', 'past_due'] as const;
 
-export type SpreadsheetViewType = (typeof SPREADSHEET_VIEW_TYPES)[number];
-export type SpreadsheetEnrichmentStatus = (typeof SPREADSHEET_ENRICHMENT_STATUSES)[number];
-export type SpreadsheetEnrichmentProvider = (typeof SPREADSHEET_ENRICHMENT_PROVIDERS)[number];
-export type SpreadsheetTriggerSource = (typeof SPREADSHEET_TRIGGER_SOURCES)[number];
-export type SpreadsheetSemanticType = (typeof SPREADSHEET_SEMANTIC_TYPES)[number];
-
-export interface SpreadsheetColumnEnrichment {
-  key: string;
-  label: string;
-  dataType: 'string' | 'number' | 'boolean' | 'date' | 'json';
-  semanticType: SpreadsheetSemanticType;
-  displayLabel: string;
-  helpText: string;
-  visible: boolean;
-  editable: boolean;
-  required: boolean;
-  sensitive: boolean;
-  filterable: boolean;
-  groupable: boolean;
-  order: number;
-}
-
-export interface SpreadsheetViewRecommendation {
-  type: SpreadsheetViewType;
-  enabled: boolean;
-  title: string;
-  description: string;
-  defaultSortKey: string | null;
-  defaultFilterKeys: string[];
-  groupingColumnKey: string | null;
-}
-
-export interface SpreadsheetEnrichmentConfiguration {
-  version: '1';
-  title: string;
-  summary: string;
-  primaryView: SpreadsheetViewType;
-  recommendedViews: SpreadsheetViewRecommendation[];
-  kanbanColumnKey: string | null;
-  columns: SpreadsheetColumnEnrichment[];
-  generatedBy: SpreadsheetEnrichmentProvider;
-  model: string | null;
-}
+export type AppStatus = (typeof APP_STATUSES)[number];
+export type AnalysisStatus = (typeof ANALYSIS_STATUSES)[number];
+export type SpecSource = (typeof SPEC_SOURCES)[number];
+export type RecordOp = (typeof RECORD_OPS)[number];
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
+export type MembershipRole = (typeof MEMBERSHIP_ROLES)[number];
+export type AiUsageKind = (typeof AI_USAGE_KINDS)[number];
+export type BillingPlan = (typeof BILLING_PLANS)[number];
+export type BillingStatus = (typeof BILLING_STATUSES)[number];
 
 const timestamps = {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
@@ -77,10 +30,13 @@ export const organizations = sqliteTable('organizations', {
   name: text('name').notNull(),
   slug: text('slug').notNull(),
   ownerUserId: text('owner_user_id').notNull(),
+  /** Commercial cancellation. Hard deletion runs 30 days later. A titular erasure does not use this column. */
+  deactivatedAt: integer('deactivated_at', { mode: 'timestamp_ms' }),
   ...timestamps,
 }, (table) => [
   uniqueIndex('organizations_slug_idx').on(table.slug),
   index('organizations_owner_idx').on(table.ownerUserId),
+  index('organizations_deactivated_idx').on(table.deactivatedAt),
 ]);
 
 export const users = sqliteTable('users', {
@@ -99,7 +55,7 @@ export const users = sqliteTable('users', {
 export const accounts = sqliteTable('accounts', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tenantId: text('tenant_id').references(() => organizations.id, { onDelete: 'cascade' }),
   provider: text('provider').notNull(),
   providerAccountId: text('provider_account_id').notNull(),
   accessToken: text('access_token'),
@@ -118,7 +74,7 @@ export const memberships = sqliteTable('memberships', {
   id: text('id').primaryKey(),
   organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role', { enum: ['owner', 'admin', 'member'] }).notNull().default('member'),
+  role: text('role', { enum: MEMBERSHIP_ROLES }).notNull().default('member'),
   ...timestamps,
 }, (table) => [
   uniqueIndex('memberships_org_user_idx').on(table.organizationId, table.userId),
@@ -139,64 +95,165 @@ export const sessions = sqliteTable('sessions', {
   index('sessions_tenant_idx').on(table.activeOrganizationId),
 ]);
 
-export const spreadsheets = sqliteTable('spreadsheets', {
+export const invitations = sqliteTable('invitations', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  role: text('role', { enum: MEMBERSHIP_ROLES }).notNull().default('member'),
+  createdByUserId: text('created_by_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  acceptedAt: integer('accepted_at', { mode: 'timestamp_ms' }),
+  acceptedByUserId: text('accepted_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex('invitations_token_hash_idx').on(table.tokenHash),
+  index('invitations_tenant_idx').on(table.tenantId),
+  index('invitations_expires_idx').on(table.expiresAt),
+]);
+
+export const emailLoginChallenges = sqliteTable('email_login_challenges', {
+  id: text('id').primaryKey(),
+  emailHash: text('email_hash').notNull(),
+  codeHash: text('code_hash').notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  consumedAt: integer('consumed_at', { mode: 'timestamp_ms' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  index('email_login_challenges_email_idx').on(table.emailHash),
+  index('email_login_challenges_created_idx').on(table.createdAt),
+]);
+
+export const workbooks = sqliteTable('workbooks', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   uploadedByUserId: text('uploaded_by_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
-  name: text('name').notNull(),
   originalFilename: text('original_filename').notNull(),
   r2Key: text('r2_key').notNull(),
-  sourceType: text('source_type', { enum: ['excel', 'google-sheets', 'csv'] }).notNull().default('excel'),
-  sheetName: text('sheet_name'),
+  byteSize: integer('byte_size').notNull(),
   checksum: text('checksum'),
+  sheetCount: integer('sheet_count').notNull().default(0),
+  analysisStatus: text('analysis_status', { enum: ANALYSIS_STATUSES }).notNull().default('pending'),
+  analysisError: text('analysis_error'),
+  sampleConsentAt: integer('sample_consent_at', { mode: 'timestamp_ms' }),
+  sampleConsentByUserId: text('sample_consent_by_user_id').references(() => users.id, { onDelete: 'set null' }),
   ...timestamps,
 }, (table) => [
-  index('spreadsheets_tenant_idx').on(table.tenantId),
-  uniqueIndex('spreadsheets_r2_key_idx').on(table.r2Key),
+  index('workbooks_tenant_idx').on(table.tenantId),
+  uniqueIndex('workbooks_r2_key_idx').on(table.r2Key),
 ]);
 
-export const spreadsheetColumns = sqliteTable('spreadsheet_columns', {
+export const apps = sqliteTable('apps', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  spreadsheetId: text('spreadsheet_id').notNull().references(() => spreadsheets.id, { onDelete: 'cascade' }),
-  key: text('key').notNull(),
-  label: text('label').notNull(),
-  dataType: text('data_type', { enum: ['string', 'number', 'boolean', 'date', 'json'] }).notNull().default('string'),
-  columnIndex: integer('column_index').notNull(),
-  required: integer('required', { mode: 'boolean' }).notNull().default(false),
+  workbookId: text('workbook_id').references(() => workbooks.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  status: text('status', { enum: APP_STATUSES }).notNull().default('draft'),
+  currentVersion: integer('current_version').notNull().default(0),
+  createdByUserId: text('created_by_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   ...timestamps,
 }, (table) => [
-  uniqueIndex('spreadsheet_columns_key_idx').on(table.spreadsheetId, table.key),
-  index('spreadsheet_columns_tenant_sheet_idx').on(table.tenantId, table.spreadsheetId),
-  index('spreadsheet_columns_order_idx').on(table.spreadsheetId, table.columnIndex),
+  index('apps_tenant_idx').on(table.tenantId),
+  index('apps_workbook_idx').on(table.workbookId),
 ]);
 
-export const rowEntries = sqliteTable('row_entries', {
+export const appSpecVersions = sqliteTable('app_spec_versions', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  spreadsheetId: text('spreadsheet_id').notNull().references(() => spreadsheets.id, { onDelete: 'cascade' }),
-  rowIndex: integer('row_index').notNull(),
+  appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+  version: integer('version').notNull(),
+  spec: text('spec', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  source: text('source', { enum: SPEC_SOURCES }).notNull(),
+  proposalId: text('proposal_id'),
+  createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex('app_spec_versions_app_version_idx').on(table.appId, table.version),
+  index('app_spec_versions_tenant_idx').on(table.tenantId, table.appId),
+]);
+
+export const records = sqliteTable('records', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+  entityKey: text('entity_key').notNull(),
+  sourceRowIndex: integer('source_row_index'),
   data: text('data', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  createdByUserId: text('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  updatedByUserId: text('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
   ...timestamps,
 }, (table) => [
-  index('row_entries_tenant_sheet_idx').on(table.tenantId, table.spreadsheetId),
-  uniqueIndex('row_entries_sheet_row_idx').on(table.spreadsheetId, table.rowIndex),
+  index('records_tenant_app_entity_idx').on(table.tenantId, table.appId, table.entityKey),
+  index('records_app_entity_order_idx').on(table.appId, table.entityKey, table.sourceRowIndex),
 ]);
 
-export const spreadsheetEnrichments = sqliteTable('spreadsheet_enrichments', {
+export const recordChanges = sqliteTable('record_changes', {
   id: text('id').primaryKey(),
   tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  spreadsheetId: text('spreadsheet_id').notNull().references(() => spreadsheets.id, { onDelete: 'cascade' }),
-  status: text('status', { enum: SPREADSHEET_ENRICHMENT_STATUSES }).notNull().default('pending'),
-  provider: text('provider', { enum: SPREADSHEET_ENRICHMENT_PROVIDERS }).notNull().default('heuristic'),
-  model: text('model'),
-  config: text('config', { mode: 'json' }).$type<SpreadsheetEnrichmentConfiguration | null>(),
+  appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+  recordId: text('record_id').notNull(),
+  entityKey: text('entity_key').notNull(),
+  userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+  op: text('op', { enum: RECORD_OPS }).notNull(),
+  before: text('before', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  after: text('after', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  proposalId: text('proposal_id'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  index('record_changes_record_idx').on(table.tenantId, table.appId, table.recordId),
+  index('record_changes_proposal_idx').on(table.proposalId),
+  index('record_changes_created_idx').on(table.createdAt),
+]);
+
+export const appChangeProposals = sqliteTable('app_change_proposals', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+  baseVersion: integer('base_version').notNull(),
+  instruction: text('instruction').notNull(),
+  operations: text('operations', { mode: 'json' }).$type<unknown[]>().notNull(),
+  preview: text('preview', { mode: 'json' }).$type<Record<string, unknown> | null>(),
+  status: text('status', { enum: PROPOSAL_STATUSES }).notNull().default('pending'),
   errorMessage: text('error_message'),
-  lastTriggeredBy: text('last_triggered_by', { enum: SPREADSHEET_TRIGGER_SOURCES }).notNull().default('upload'),
-  lastEnqueuedAt: integer('last_enqueued_at', { mode: 'timestamp_ms' }),
-  lastProcessedAt: integer('last_processed_at', { mode: 'timestamp_ms' }),
+  createdByUserId: text('created_by_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  appliedVersion: integer('applied_version'),
   ...timestamps,
 }, (table) => [
-  uniqueIndex('spreadsheet_enrichments_tenant_sheet_idx').on(table.tenantId, table.spreadsheetId),
-  index('spreadsheet_enrichments_status_idx').on(table.status),
+  index('app_change_proposals_app_idx').on(table.tenantId, table.appId),
+  index('app_change_proposals_status_idx').on(table.status, table.createdAt),
+]);
+
+export const aiUsage = sqliteTable('ai_usage', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  kind: text('kind', { enum: AI_USAGE_KINDS }).notNull(),
+  inputChars: integer('input_chars').notNull(),
+  outputChars: integer('output_chars').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  index('ai_usage_tenant_created_idx').on(table.tenantId, table.createdAt),
+]);
+
+export const billingAccounts = sqliteTable('billing_accounts', {
+  organizationId: text('organization_id').primaryKey().references(() => organizations.id, { onDelete: 'cascade' }),
+  plan: text('plan', { enum: BILLING_PLANS }).notNull().default('free'),
+  status: text('status', { enum: BILLING_STATUSES }).notNull().default('none'),
+  mpPayerId: text('mp_payer_id'),
+  mpPreapprovalId: text('mp_preapproval_id'),
+  currentPeriodEnd: integer('current_period_end', { mode: 'timestamp_ms' }),
+  ...timestamps,
+});
+
+export const payments = sqliteTable('payments', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  mpPaymentId: text('mp_payment_id').notNull(),
+  status: text('status').notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  currency: text('currency').notNull().default('UYU'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex('payments_mp_payment_id_idx').on(table.mpPaymentId),
+  index('payments_tenant_idx').on(table.tenantId),
 ]);

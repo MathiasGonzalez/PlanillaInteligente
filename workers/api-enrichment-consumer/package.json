@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@planilla/cloudflare": "*",
-    "@planilla/spreadsheets": "*"
+    "@planilla/apps": "*",
+    "@planilla/cloudflare": "*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260915.1",
-    "typescript": "5.9.2",
-    "wrangler": "4.132.0"
+    "@cloudflare/workers-types": "5.20260922.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.136.2"
   }
 }

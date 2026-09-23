@@ -6,3 +6,9 @@ export function json(data: unknown, status = 200) {
     },
   });
 }
+
+export function fail(status: number, error = 'No se pudo completar la operación.') {
+  const correlationId = crypto.randomUUID();
+  console.error(JSON.stringify({ event: 'api_error', correlationId, status }));
+  return json({ error, correlationId }, status);
+}

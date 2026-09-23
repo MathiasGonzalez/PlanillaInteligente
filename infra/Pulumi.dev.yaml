@@ -1,0 +1,5 @@
+config:
+  planilla-inteligente-infra:nameSuffix: "-preview"
+  planilla-inteligente-infra:pagesNameSuffix: "-dev"
+  planilla-inteligente-infra:wranglerTarget: preview
+  planilla-inteligente-infra:pagesProductionBranch: dev

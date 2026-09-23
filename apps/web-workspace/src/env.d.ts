@@ -19,8 +19,16 @@ declare namespace Cloudflare {
     TURNSTILE_SECRET_KEY: string;
     WORKERS_AI_MODEL?: string;
     AI_GATEWAY_ID?: string;
+    TOKEN_ENCRYPTION_KEY?: string;
+    AUTH_HMAC_KEY?: string;
+    ANALYSIS_MODE?: string;
+    EMAIL_SEND_URL?: string;
+    EMAIL_API_KEY?: string;
+    MERCADOPAGO_ACCESS_TOKEN?: string;
+    MERCADOPAGO_WEBHOOK_SECRET?: string;
+    MERCADOPAGO_PUBLIC_KEY?: string;
     AI?: WorkersAiBinding;
-    ENRICHMENT_QUEUE?: QueueBinding<import('@planilla/spreadsheets/enrichment/types').SpreadsheetEnrichmentMessage>;
+    ENRICHMENT_QUEUE?: QueueBinding<import('@planilla/apps/jobs').AppJobMessage>;
   }
 }
 
@@ -34,7 +42,7 @@ declare namespace App {
           name: string | null;
           image: string | null;
           defaultOrganizationId: string | null;
-          role: 'owner' | 'admin' | 'member';
+          role: 'owner' | 'member';
         }
       | null;
     session:
@@ -47,5 +55,6 @@ declare namespace App {
         }
       | null;
     tenantId: string | null;
+    orgDeactivated: boolean;
   }
 }

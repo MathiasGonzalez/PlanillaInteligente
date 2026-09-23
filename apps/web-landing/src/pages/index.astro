@@ -1,4 +1,7 @@
 ---
+import '@planilla/theme/tokens.css';
+import '@planilla/theme/base.css';
+
 const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
 ---
 
@@ -12,62 +15,52 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
       content="Transformá las planillas que ya usás en una aplicación web estructurada, multiusuario y lista para operar."
     />
     <style>
-      :root {
-        color-scheme: light;
-        --ink: #1c1917;
-        --muted: #57534e;
-        --paper: #faf7f2;
-        --line: #e7e0d6;
-        --accent: #0f766e;
-        --accent-hover: #0d5f59;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      html,
       body {
-        margin: 0;
-        min-height: 100%;
-      }
-
-      body {
-        font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-        background: var(--paper);
-        color: var(--ink);
-      }
-
-      main {
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        padding: 2.5rem 1.25rem;
-      }
-
-      .panel {
-        width: min(40rem, 100%);
+        display: flex;
+        flex-direction: column;
+        background:
+          radial-gradient(ellipse 70% 50% at 85% 12%, #e7f3ee 0%, transparent 58%),
+          radial-gradient(ellipse 50% 40% at 8% 90%, #f3ebe0 0%, transparent 55%),
+          var(--paper);
       }
 
       .eyebrow {
-        margin: 0 0 1rem;
-        font-family: ui-sans-serif, system-ui, sans-serif;
-        font-size: 0.75rem;
-        font-weight: 650;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--accent);
+        margin-bottom: 1rem;
       }
 
       h1 {
         margin: 0;
         font-size: clamp(2.4rem, 6vw, 3.6rem);
         line-height: 1.05;
-        font-weight: 600;
         letter-spacing: -0.03em;
       }
 
-      p {
+      .hero .cta {
+        margin-top: 2rem;
+      }
+
+      main {
+        flex: 1;
+        width: min(68rem, 100%);
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 3.5rem;
+      }
+
+      .hero {
+        display: grid;
+        gap: 2.75rem;
+        align-items: center;
+        min-height: min(72vh, 40rem);
+      }
+
+      @media (min-width: 900px) {
+        .hero {
+          grid-template-columns: minmax(0, 1fr) minmax(20rem, 1.1fr);
+          gap: 3.5rem;
+        }
+      }
+
+      .lede {
         margin: 1.25rem 0 0;
         max-width: 34rem;
         font-size: 1.125rem;
@@ -75,40 +68,742 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
         color: var(--muted);
       }
 
-      .cta {
-        display: inline-flex;
-        margin-top: 2rem;
-        padding: 0.85rem 1.35rem;
-        border-radius: 999px;
-        background: var(--accent);
+      .scene {
+        position: relative;
+        isolation: isolate;
+        min-height: 22rem;
+      }
+
+      .sheet,
+      .app-frame {
+        font-family: var(--sans);
+        background: white;
+        border: 1px solid var(--line);
+        box-shadow: 0 22px 50px -28px rgb(28 25 23 / 0.45);
+      }
+
+      .sheet {
+        width: min(100%, 26.5rem);
+        border-radius: 12px;
+        overflow: hidden;
+        transform: rotate(-3.5deg);
+        position: relative;
+        z-index: 1;
+      }
+
+      .sheet-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.55rem 0.75rem;
+        background: var(--sheet);
         color: white;
-        font-family: ui-sans-serif, system-ui, sans-serif;
-        font-size: 0.95rem;
+        font-size: 0.72rem;
+        font-weight: 650;
+      }
+
+      .sheet-dot {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 50%;
+        background: rgb(255 255 255 / 0.55);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.25fr 1.05fr 0.9fr;
+        font-size: 0.72rem;
+      }
+
+      .grid span {
+        padding: 0.48rem 0.55rem;
+        border-bottom: 1px solid #eef2ee;
+        border-right: 1px solid #eef2ee;
+        color: #3f3c38;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .grid span:nth-child(3n) {
+        border-right: 0;
+      }
+
+      .grid .h {
+        background: #f3f7f4;
+        font-weight: 700;
+        color: #1f3d2c;
+      }
+
+      .app-frame {
+        width: min(100%, 27rem);
+        margin-left: auto;
+        margin-top: -4.5rem;
+        border-radius: 16px;
+        overflow: hidden;
+        transform: rotate(2.8deg);
+        position: relative;
+        z-index: 2;
+      }
+
+      .app-bar {
+        display: flex;
+        gap: 0.35rem;
+        padding: 0.7rem 0.85rem 0.55rem;
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .tab {
+        padding: 0.28rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 650;
+        color: var(--muted);
+      }
+
+      .tab.on {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .views {
+        position: relative;
+        min-height: 11.2rem;
+      }
+
+      .view {
+        padding: 0.7rem 0.85rem 0.9rem;
+      }
+
+      .view-kanban {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+      }
+
+      .app-row,
+      .kanban-col {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .app-row {
+        grid-template-columns: minmax(0, 1.2fr) minmax(6.2rem, 1fr) minmax(4.2rem, 0.7fr);
+        align-items: center;
+        padding: 0.42rem 0.2rem;
+        font-size: 0.72rem;
+        border-bottom: 1px solid #f1ece4;
+      }
+
+      .app-row.head {
+        color: var(--muted);
+        font-weight: 650;
+        font-size: 0.64rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border-bottom-color: var(--line);
+      }
+
+      .pill {
+        justify-self: start;
+        padding: 0.12rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.62rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .pill.ok {
+        background: #ecfccb;
+        color: var(--ok);
+      }
+
+      .pill.mid {
+        background: #ffedd5;
+        color: var(--warn);
+      }
+
+      .pill.wait {
+        background: #e7e5e4;
+        color: #44403c;
+      }
+
+      .kanban {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.45rem;
+        height: 100%;
+      }
+
+      .kanban-col {
+        background: #f7f3ec;
+        border-radius: 10px;
+        padding: 0.45rem;
+        min-height: 9.4rem;
+      }
+
+      .kanban-col strong {
+        font-size: 0.62rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .kanban .card {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.45rem 0.5rem;
+        font-size: 0.7rem;
         font-weight: 600;
-        text-decoration: none;
       }
 
-      .cta:hover {
-        background: var(--accent-hover);
+      .kanban .card small {
+        display: block;
+        margin-top: 0.2rem;
+        font-weight: 500;
+        color: var(--muted);
       }
 
-      .cta:focus-visible {
+      .steps {
+        display: grid;
+        gap: 1rem;
+        margin-top: 3.5rem;
+      }
+
+      @media (min-width: 720px) {
+        .steps {
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 1.25rem;
+        }
+      }
+
+      .step {
+        padding: 1.15rem 1.15rem 1.25rem;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgb(255 255 255 / 0.55);
+      }
+
+      .step svg {
+        display: block;
+        margin-bottom: 0.85rem;
+      }
+
+      .step h2 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+      }
+
+      .step p {
+        margin: 0.45rem 0 0;
+        font-family: var(--sans);
+        font-size: 0.875rem;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .site-footer {
+        width: min(68rem, calc(100% - 2.5rem));
+        margin: 0 auto;
+        padding: 0 0 2.5rem;
+      }
+
+      .cloudflare-notice {
+        margin: 1.25rem 0 0;
+        padding: 1rem 0 0;
+        border-top: 1px solid var(--line);
+        font-family: var(--sans);
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .disclosure {
+        border-top: 1px solid var(--line);
+      }
+
+      details:not([open]) > *:not(summary) {
+        display: none;
+      }
+
+      .disclosure > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 1rem 0;
+        font-family: var(--sans);
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+      }
+
+      .disclosure > summary::marker,
+      .disclosure > summary::-webkit-details-marker {
+        content: none;
+        display: none;
+      }
+
+      .disclosure-label,
+      .topic-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        width: 100%;
+      }
+
+      .disclosure-label::after {
+        content: "";
+        flex-shrink: 0;
+        width: 0.45rem;
+        height: 0.45rem;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: rotate(45deg);
+        translate: 0 -0.12rem;
+      }
+
+      .disclosure[open] > summary {
+        color: var(--ink);
+      }
+
+      .disclosure[open] .disclosure-label::after {
+        transform: rotate(225deg);
+        translate: 0 0.12rem;
+      }
+
+      .disclosure > summary:hover {
+        color: var(--ink);
+      }
+
+      .disclosure > summary:focus-visible {
         outline: 2px solid var(--ink);
-        outline-offset: 3px;
+        outline-offset: 4px;
+        border-radius: 2px;
+      }
+
+      .disclosure-panel {
+        padding: 0 0 1.25rem;
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .disclosure-panel p {
+        margin: 0 0 0.75rem;
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .topic {
+        border-top: 1px solid var(--line);
+      }
+
+      .topic > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 0.85rem 0;
+        font-family: var(--sans);
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .topic > summary::marker,
+      .topic > summary::-webkit-details-marker {
+        content: none;
+        display: none;
+      }
+
+      .topic-label::after {
+        content: "+";
+        font-weight: 500;
+        color: var(--muted);
+      }
+
+      .topic[open] .topic-label::after {
+        content: "–";
+      }
+
+      .topic > summary:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 4px;
+        border-radius: 2px;
+      }
+
+      .topic p {
+        margin: 0 0 0.95rem;
+        font-family: var(--sans);
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .scene,
+        .step {
+          animation: rise 0.7s ease both;
+        }
+
+        .scene {
+          animation-delay: 0.12s;
+        }
+
+        .step:nth-child(1) {
+          animation-delay: 0.18s;
+        }
+
+        .step:nth-child(2) {
+          animation-delay: 0.28s;
+        }
+
+        .step:nth-child(3) {
+          animation-delay: 0.38s;
+        }
+
+        .sheet {
+          animation: float-sheet 7s ease-in-out infinite;
+        }
+
+        .app-frame {
+          animation: float-app 8s ease-in-out infinite;
+        }
+
+        .grid span:not(.h) {
+          animation: ink 2.8s ease both;
+        }
+
+        .grid span:nth-child(4) {
+          animation-delay: 0.15s;
+        }
+        .grid span:nth-child(5) {
+          animation-delay: 0.22s;
+        }
+        .grid span:nth-child(6) {
+          animation-delay: 0.28s;
+        }
+        .grid span:nth-child(7) {
+          animation-delay: 0.34s;
+        }
+        .grid span:nth-child(8) {
+          animation-delay: 0.4s;
+        }
+        .grid span:nth-child(9) {
+          animation-delay: 0.46s;
+        }
+        .grid span:nth-child(10) {
+          animation-delay: 0.52s;
+        }
+        .grid span:nth-child(11) {
+          animation-delay: 0.58s;
+        }
+        .grid span:nth-child(12) {
+          animation-delay: 0.64s;
+        }
+
+        .tab-table {
+          animation: tab-table 5.5s ease-in-out infinite;
+        }
+
+        .tab-kanban {
+          animation: tab-kanban 5.5s ease-in-out infinite;
+        }
+
+        .view-table {
+          animation: show-table 5.5s ease-in-out infinite;
+        }
+
+        .view-kanban {
+          animation: show-kanban 5.5s ease-in-out infinite;
+        }
+
+        .disclosure-label::after {
+          transition: transform 0.15s ease, translate 0.15s ease;
+        }
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      @keyframes float-sheet {
+        0%,
+        100% {
+          transform: rotate(-3.5deg) translateY(0);
+        }
+        50% {
+          transform: rotate(-3.5deg) translateY(-8px);
+        }
+      }
+
+      @keyframes float-app {
+        0%,
+        100% {
+          transform: rotate(2.8deg) translateY(0);
+        }
+        50% {
+          transform: rotate(2.8deg) translateY(-8px);
+        }
+      }
+
+      @keyframes ink {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes show-table {
+        0%,
+        42%,
+        100% {
+          opacity: 1;
+        }
+        50%,
+        92% {
+          opacity: 0;
+        }
+      }
+
+      @keyframes show-kanban {
+        0%,
+        42%,
+        100% {
+          opacity: 0;
+        }
+        50%,
+        92% {
+          opacity: 1;
+        }
+      }
+
+      @keyframes tab-table {
+        0%,
+        42%,
+        100% {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
+        50%,
+        92% {
+          background: transparent;
+          color: var(--muted);
+        }
+      }
+
+      @keyframes tab-kanban {
+        0%,
+        42%,
+        100% {
+          background: transparent;
+          color: var(--muted);
+        }
+        50%,
+        92% {
+          background: var(--accent-soft);
+          color: var(--accent);
+        }
       }
     </style>
   </head>
   <body>
     <main>
-      <section class="panel">
-        <p class="eyebrow">PlanillaInteligente</p>
-        <h1>Subí tu Excel. Obtené tu app.</h1>
-        <p>
-          Convertí las planillas que ya usa tu negocio en una aplicación web
-          estructurada, multiusuario y lista para operar.
-        </p>
-        <a class="cta" href={appUrl}>Entrar al workspace</a>
+      <section class="hero">
+        <div class="copy">
+          <p class="eyebrow">PlanillaInteligente</p>
+          <h1>Subí tu Excel. Obtené tu app.</h1>
+          <p class="lede">
+            Convertí las planillas que ya usa tu negocio en una aplicación web
+            estructurada, multiusuario y lista para operar.
+          </p>
+          <a class="cta" href={appUrl}>Crear mi app</a>
+        </div>
+
+        <div class="scene" aria-hidden="true">
+          <div class="sheet">
+            <div class="sheet-bar">
+              <span class="sheet-dot"></span>
+              ventas.xlsx
+            </div>
+            <div class="grid">
+              <span class="h">Cliente</span>
+              <span class="h">Estado</span>
+              <span class="h">Monto</span>
+              <span>Acme Sur</span>
+              <span>En curso</span>
+              <span>$12.400</span>
+              <span>Norte SA</span>
+              <span>Listo</span>
+              <span>$8.200</span>
+              <span>Costa Ltda</span>
+              <span>Pendiente</span>
+              <span>$4.150</span>
+            </div>
+          </div>
+
+          <div class="app-frame">
+            <div class="app-bar">
+              <span class="tab tab-table on">Tabla</span>
+              <span class="tab tab-kanban">Kanban</span>
+            </div>
+            <div class="views">
+              <div class="view view-table">
+                <div class="app-row head">
+                  <span>Cliente</span>
+                  <span>Estado</span>
+                  <span>Monto</span>
+                </div>
+                <div class="app-row">
+                  <span>Acme Sur</span>
+                  <span class="pill mid">En curso</span>
+                  <span>$12.400</span>
+                </div>
+                <div class="app-row">
+                  <span>Norte SA</span>
+                  <span class="pill ok">Listo</span>
+                  <span>$8.200</span>
+                </div>
+                <div class="app-row">
+                  <span>Costa Ltda</span>
+                  <span class="pill wait">Pendiente</span>
+                  <span>$4.150</span>
+                </div>
+              </div>
+              <div class="view view-kanban">
+                <div class="kanban">
+                  <div class="kanban-col">
+                    <strong>Pendiente</strong>
+                    <div class="card">Costa Ltda<small>$4.150</small></div>
+                  </div>
+                  <div class="kanban-col">
+                    <strong>En curso</strong>
+                    <div class="card">Acme Sur<small>$12.400</small></div>
+                  </div>
+                  <div class="kanban-col">
+                    <strong>Listo</strong>
+                    <div class="card">Norte SA<small>$8.200</small></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="steps" aria-label="Qué incluye">
+        <article class="step">
+          <h2>Equipo</h2>
+          <p>Invitás a quien carga y edita la misma lista. El dueño administra la cuenta.</p>
+        </article>
+        <article class="step">
+          <h2>Resumen</h2>
+          <p>Conteos y sumas salen de las columnas numéricas, sin armar un tablero a mano.</p>
+        </article>
+        <article class="step">
+          <h2>Instrucciones</h2>
+          <p>Pedís un campo o una lista nueva. Ves el cambio y lo confirmás antes de aplicarlo.</p>
+        </article>
+      </section>
+
+      <section class="steps" aria-label="Qué no es">
+        <article class="step">
+          <h2>No es un ERP</h2>
+          <p>No reemplaza contabilidad, facturación legal ni un editor de planillas.</p>
+        </article>
+        <article class="step">
+          <h2>Tus celdas</h2>
+          <p>Por defecto el modelo no recibe el contenido. El almacenamiento lo hace Cloudflare, encargado del tratamiento.</p>
+        </article>
+      </section>
+
+      <section class="steps" aria-label="Cómo funciona">
+        <article class="step">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <rect x="6" y="8" width="28" height="24" rx="4" stroke="var(--accent)" stroke-width="1.6"></rect>
+            <path d="M6 14h28" stroke="var(--accent)" stroke-width="1.6"></path>
+            <path d="M16 8v6" stroke="var(--accent)" stroke-width="1.6"></path>
+            <path d="M13 22h14" stroke="var(--accent-soft)" stroke-width="2" stroke-linecap="round"></path>
+            <path d="M13 27h9" stroke="var(--accent-soft)" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          <h2>Subí el Excel</h2>
+          <p>El archivo que ya usan. Sin armar nada de cero.</p>
+        </article>
+        <article class="step">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <circle cx="20" cy="20" r="12" stroke="var(--accent)" stroke-width="1.6"></circle>
+            <path d="M14 21.5 18 25l8-10" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          <h2>Leemos la estructura</h2>
+          <p>Columnas, estados y números: de ahí sale la interfaz.</p>
+        </article>
+        <article class="step">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+            <rect x="7" y="10" width="12" height="20" rx="3" stroke="var(--accent)" stroke-width="1.6"></rect>
+            <rect x="21" y="10" width="12" height="12" rx="3" stroke="var(--accent)" stroke-width="1.6"></rect>
+            <rect x="21" y="24" width="12" height="6" rx="2" fill="var(--accent-soft)"></rect>
+          </svg>
+          <h2>Operá en la app</h2>
+          <p>Tabla o kanban, con tu equipo, sobre los mismos datos.</p>
+        </article>
       </section>
     </main>
+
+    <footer class="site-footer">
+      <details class="disclosure">
+        <summary><span class="disclosure-label">Privacidad y seguridad</span></summary>
+        <div class="disclosure-panel">
+          <p>Pensado para Uruguay y su ley de protección de datos.</p>
+
+          <details class="topic" name="compliance">
+            <summary><span class="topic-label">Dónde se guardan los datos</span></summary>
+            <p>
+              Los archivos los guarda Cloudflare, encargado del tratamiento. No hay
+              un centro de datos en Uruguay.
+            </p>
+          </details>
+
+          <details class="topic" name="compliance">
+            <summary><span class="topic-label">Quién puede ver tus planillas</span></summary>
+            <p>
+              Cada negocio ve solo las suyas. Entrá con tu cuenta de Google: otra
+              organización no puede acceder a tus planillas.
+            </p>
+          </details>
+
+          <details class="topic" name="compliance">
+            <summary><span class="topic-label">Qué usa la inteligencia artificial</span></summary>
+            <p>
+              Para armar la app miramos cómo está organizada la planilla, no el
+              contenido de las celdas. Eso solo se envía si lo activás vos en esa
+              planilla.
+            </p>
+          </details>
+
+          <details class="topic" name="compliance">
+            <summary><span class="topic-label">Cómo borrar tus datos</span></summary>
+            <p>
+              Podés borrar una planilla cuando quieras. Si das de baja el
+              workspace, los datos se eliminan a los 30 días. Si pedís borrar la
+              cuenta, se borra de inmediato.
+            </p>
+          </details>
+        </div>
+      </details>
+      <p class="cloudflare-notice">
+        Utilizamos Cloudflare, Inc. como proveedor de red y seguridad cibernética. Al interactuar con este sitio, el tráfico es encauzado a través de la red global de Cloudflare para mitigar amenazas y optimizar la velocidad de carga. Cloudflare trata los datos de tráfico e identificación de red bajo estrictos estándares internacionales de confidencialidad y cifrado, garantizando la protección de los datos en conformidad con la Ley N° 18.331 de Protección de Datos Personales de Uruguay.
+      </p>
+    </footer>
   </body>
 </html>

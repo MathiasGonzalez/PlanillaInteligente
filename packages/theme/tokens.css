@@ -1,0 +1,16 @@
+:root {
+  color-scheme: light;
+  --ink: #1c1917;
+  --muted: #57534e;
+  --paper: #faf7f2;
+  --line: #e7e0d6;
+  --accent: #0f766e;
+  --accent-hover: #0d5f59;
+  --accent-soft: #d9efe8;
+  --warn: #c2410c;
+  --ok: #3f6212;
+  --sheet: #217346;
+  --sans: ui-sans-serif, system-ui, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --radius: 16px;
+}

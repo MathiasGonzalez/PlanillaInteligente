@@ -1,0 +1,27 @@
+---
+import { acceptInvitation } from '@planilla/apps/members';
+import { cloudflareEnv } from '@planilla/cloudflare/env';
+import { switchActiveOrganization } from '../../lib/auth';
+
+const token = Astro.params.token;
+if (!token) return new Response('Not found', { status: 404 });
+
+const user = Astro.locals.user;
+const session = Astro.locals.session;
+if (user && session) {
+  const accepted = await acceptInvitation(Astro.locals.db, { token, userId: user.id });
+  if (accepted) {
+    await switchActiveOrganization(Astro.locals.db, cloudflareEnv.SESSION_KV, session, user, accepted.tenantId);
+  }
+  return Astro.redirect('/');
+}
+
+Astro.cookies.set('pending_invite', token, {
+  httpOnly: true,
+  path: '/',
+  sameSite: 'lax',
+  secure: Astro.url.hostname !== 'localhost',
+  maxAge: 7 * 24 * 60 * 60,
+});
+return Astro.redirect('/login');
+---

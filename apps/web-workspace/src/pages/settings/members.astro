@@ -1,0 +1,38 @@
+---
+import WorkspaceLayout from '../../layouts/WorkspaceLayout.astro';
+import { listInvitations, listMembers } from '@planilla/apps/members';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+if (!user || !tenantId) return Astro.redirect('/login');
+if (user.role !== 'owner') return Astro.redirect('/');
+const members = await listMembers(Astro.locals.db, tenantId);
+const invitations = await listInvitations(Astro.locals.db, tenantId);
+---
+<WorkspaceLayout title="Equipo — PlanillaInteligente">
+  <main class="page page--compact">
+    <p><a href="/">← Mis apps</a></p>
+    <section class="card">
+      <h1>Equipo</h1>
+      <p class="muted">El invitado entra al mismo workspace. Puede ver, cargar, editar y borrar filas. No borra la app ni la cuenta, y no invita.</p>
+      <ul>
+        {members.map((member) => <li>{member.name ?? member.email} · {member.role}</li>)}
+      </ul>
+      <button class="cta" type="button" id="invite">Generar enlace de invitación</button>
+      <p id="invite-url" class="muted"></p>
+      <h2>Invitaciones</h2>
+      <ul>
+        {invitations.map((invite) => <li>{invite.role} · {invite.acceptedAt ? 'aceptada' : `vence ${invite.expiresAt.toISOString().slice(0, 10)}`}</li>)}
+      </ul>
+    </section>
+  </main>
+  <script>
+    import { jsonFetch } from '../../lib/json-fetch';
+    document.querySelector('#invite')?.addEventListener('click', async () => {
+      const { ok, data } = await jsonFetch<{ url?: string; error?: string }>('/api/invitations', { method: 'POST' });
+      const target = document.querySelector('#invite-url');
+      if (target) target.textContent = ok && data?.url ? data.url : (data?.error ?? 'No se pudo crear el enlace.');
+    });
+  </script>
+</WorkspaceLayout>
+

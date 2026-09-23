@@ -10,7 +10,7 @@ export default defineConfig({
   integrations: [react()],
   vite: {
     ssr: {
-      noExternal: ['xlsx-populate', '@planilla/cloudflare', '@planilla/spreadsheets'],
+      noExternal: ['xlsx-populate', '@planilla/cloudflare', '@planilla/spreadsheets', '@planilla/apps'],
     },
   },
 });

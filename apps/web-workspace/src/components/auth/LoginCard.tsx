@@ -1,5 +1,17 @@
 import { LogIn } from 'lucide-react';
-import type { JSX } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { EmailLogin } from './EmailLogin';
+
+interface TurnstileApi {
+  render(element: HTMLElement, options: {
+    sitekey: string;
+    theme: 'light';
+    callback: (token: string) => void;
+    'expired-callback': () => void;
+  }): string;
+  remove(widgetId: string): void;
+  reset(widgetId: string): void;
+}
 
 interface LoginCardProps {
   action?: string;
@@ -9,44 +21,81 @@ interface LoginCardProps {
   error?: string;
 }
 
-const baseCardClassName =
-  'w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-950';
-const buttonClassName =
-  'inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-70 dark:border-slate-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200';
-
 export function LoginCard({
   action = '/api/auth/signin/google',
   siteKey,
   title = 'Accede a tu workspace',
-  description = 'Inicia sesión con Google para crear o seleccionar tu organización multi-tenant.',
+  description = 'Entrá con Google o con un código que te llega al email.',
   error,
 }: LoginCardProps): JSX.Element {
+  const slot = useRef<HTMLDivElement>(null);
+  const widgetId = useRef<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const mount = () => {
+      const turnstile = (window as Window & { turnstile?: TurnstileApi }).turnstile;
+      const node = slot.current;
+      if (cancelled || !turnstile || !node || widgetId.current) return;
+      widgetId.current = turnstile.render(node, {
+        sitekey: siteKey,
+        theme: 'light',
+        callback: (next) => setToken(next),
+        'expired-callback': () => setToken(null),
+      });
+    };
+    mount();
+    const timer = window.setInterval(mount, 200);
+    const stop = window.setTimeout(() => window.clearInterval(timer), 4000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.clearTimeout(stop);
+      const turnstile = (window as Window & { turnstile?: TurnstileApi }).turnstile;
+      if (widgetId.current && turnstile) turnstile.remove(widgetId.current);
+      widgetId.current = null;
+    };
+  }, [siteKey]);
+
+  function resetChallenge() {
+    setToken(null);
+    const turnstile = (window as Window & { turnstile?: TurnstileApi }).turnstile;
+    if (widgetId.current && turnstile) turnstile.reset(widgetId.current);
+  }
+
+  function onGoogleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!token) {
+      event.preventDefault();
+      setLocalError('Confirmá el captcha antes de continuar.');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'cf-turnstile-response';
+    input.value = token;
+    event.currentTarget.appendChild(input);
+  }
+
   return (
-    <section className={baseCardClassName} aria-label="Inicio de sesión">
-      <div className="space-y-2 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-600">PlanillaInteligente</p>
-        <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">{title}</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{description}</p>
+    <section className="card login-card" aria-label="Inicio de sesión">
+      <div className="login-copy">
+        <p className="eyebrow">PlanillaInteligente</p>
+        <h1>{title}</h1>
+        <p className="muted">{description}</p>
       </div>
 
-      <form method="post" action={action} className="mt-6 space-y-4">
-        <div
-          className="cf-turnstile flex min-h-16 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900"
-          data-sitekey={siteKey}
-          data-theme="auto"
-        />
+      <div ref={slot} className="turnstile-slot" />
+      {error || localError ? <p className="alert login-alert">{error ?? localError}</p> : null}
 
-        {error ? (
-          <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
-            {error}
-          </p>
-        ) : null}
-
-        <button type="submit" className={buttonClassName}>
-          <LogIn className="h-4 w-4" aria-hidden="true" />
+      <form method="post" action={action} className="login-form" onSubmit={onGoogleSubmit}>
+        <button type="submit" className="cta">
+          <LogIn size={16} aria-hidden="true" />
           Continuar con Google
         </button>
       </form>
+      <EmailLogin token={token} onResetChallenge={resetChallenge} />
     </section>
   );
 }

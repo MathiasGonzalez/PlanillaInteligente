@@ -3,11 +3,16 @@
   "name": "planilla-inteligente-enrichment-consumer",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-13",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true
+  },
 
   // Plain-text vars only. GOOGLE_CLIENT_SECRET / TURNSTILE_SECRET_KEY are not needed
   // by the consumer. AI_GATEWAY_ID is optional — set it to route through AI Gateway.
   "vars": {
-    "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
+    "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
     "AI_GATEWAY_ID": ""
   },
 
@@ -19,7 +24,15 @@
     {
       "binding": "DB",
       "database_name": "planilla-inteligente",
+      // Placeholder. CI fills this from Pulumi stack output (do not commit real IDs).
       "database_id": "replace-with-d1-database-id"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "planilla-inteligente-assets"
     }
   ],
 
@@ -31,6 +44,11 @@
         "max_batch_timeout": 30,
         "max_retries": 3,
         "dead_letter_queue": "planilla-inteligente-enrichment-dlq"
+      },
+      {
+        "queue": "planilla-inteligente-enrichment-dlq",
+        "max_batch_size": 10,
+        "max_retries": 1
       }
     ]
   },
@@ -38,8 +56,13 @@
   // Preview environment — uses separate D1 database to avoid touching production data.
   "env": {
     "preview": {
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "redact_query_string": true
+      },
       "vars": {
-        "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct",
+        "WORKERS_AI_MODEL": "@cf/meta/llama-3.1-8b-instruct-fast",
         "AI_GATEWAY_ID": ""
       },
       "ai": {
@@ -49,7 +72,14 @@
         {
           "binding": "DB",
           "database_name": "planilla-inteligente-preview",
+          // Placeholder. CI fills this from Pulumi stack output (do not commit real IDs).
           "database_id": "replace-with-preview-d1-database-id"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "BUCKET",
+          "bucket_name": "planilla-inteligente-assets-preview"
         }
       ],
       "queues": {
@@ -60,6 +90,11 @@
             "max_batch_timeout": 30,
             "max_retries": 3,
             "dead_letter_queue": "planilla-inteligente-enrichment-preview-dlq"
+          },
+          {
+            "queue": "planilla-inteligente-enrichment-preview-dlq",
+            "max_batch_size": 10,
+            "max_retries": 1
           }
         ]
       }

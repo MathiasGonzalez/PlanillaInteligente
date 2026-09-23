@@ -1,0 +1,26 @@
+---
+import AppFrame from '../../../../components/apps/AppFrame.astro';
+import RecordForm from '../../../../components/apps/RecordForm';
+import WorkspaceLayout from '../../../../layouts/WorkspaceLayout.astro';
+import { loadSpec } from '@planilla/apps/records';
+import { entityOf, visibleFields } from '@planilla/apps/spec';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+const { id: appId, entity: entityKey } = Astro.params;
+if (!user || !tenantId || !appId || !entityKey) return Astro.redirect('/login');
+const spec = await loadSpec(Astro.locals.db, tenantId, appId);
+const entity = spec ? entityOf(spec, entityKey) : null;
+if (!spec || !entity) return new Response('Not found', { status: 404 });
+---
+<WorkspaceLayout title={`Nuevo — ${entity.name}`}>
+  <main class="page page--narrow">
+    <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
+    <p><a href={`/apps/${appId}/${entity.key}`}>← Volver a la lista</a></p>
+    <section class="card">
+      <h2>Nuevo registro</h2>
+      <RecordForm client:load appId={appId} entityKey={entity.key} fields={visibleFields(entity)} initial={{}} />
+    </section>
+  </main>
+</WorkspaceLayout>
+

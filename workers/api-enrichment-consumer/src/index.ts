@@ -1,6 +1,5 @@
 import { createDatabase } from '@planilla/cloudflare/d1';
-import { runSpreadsheetEnrichment } from '@planilla/spreadsheets/enrichment/service';
-import type { SpreadsheetEnrichmentMessage } from '@planilla/spreadsheets/enrichment/types';
+import { isAppJobMessage, markDeadLetterJob, runAppJob, type AppJobMessage } from '@planilla/apps/jobs';
 
 interface QueueMessage<T> {
   body: T;
@@ -9,46 +8,41 @@ interface QueueMessage<T> {
 }
 
 interface QueueBatch<T> {
+  queue: string;
   messages: Array<QueueMessage<T>>;
 }
 
-function isSpreadsheetEnrichmentMessage(value: unknown): value is SpreadsheetEnrichmentMessage {
-  return typeof value === 'object'
-    && value !== null
-    && 'tenantId' in value
-    && 'spreadsheetId' in value
-    && 'triggeredBy' in value
-    && 'requestedByUserId' in value
-    && typeof value.tenantId === 'string'
-    && typeof value.spreadsheetId === 'string'
-    && typeof value.triggeredBy === 'string'
-    && typeof value.requestedByUserId === 'string';
+function isDeadLetterQueue(queueName: string) {
+  return queueName.endsWith('-dlq');
 }
 
 export default {
-  async queue(batch: QueueBatch<SpreadsheetEnrichmentMessage>, env: Cloudflare.Env) {
+  async queue(batch: QueueBatch<AppJobMessage>, env: Cloudflare.Env) {
     const db = createDatabase(env.DB);
-
+    if (isDeadLetterQueue(batch.queue)) {
+      for (const message of batch.messages) {
+        const body = message.body;
+        console.error(JSON.stringify({
+          event: 'app_job_dlq',
+          tenantId: isAppJobMessage(body) ? body.tenantId : null,
+          appId: isAppJobMessage(body) ? body.appId : null,
+        }));
+        if (isAppJobMessage(body)) await markDeadLetterJob(db, body);
+        message.ack();
+      }
+      return;
+    }
     for (const message of batch.messages) {
-      if (!isSpreadsheetEnrichmentMessage(message.body)) {
+      if (!isAppJobMessage(message.body)) {
         message.ack();
         continue;
       }
-
-      const result = await runSpreadsheetEnrichment({
-        db,
-        env,
-        tenantId: message.body.tenantId,
-        spreadsheetId: message.body.spreadsheetId,
-        triggeredBy: message.body.triggeredBy,
-      });
-
-      if (result.status === 'failed') {
+      try {
+        await runAppJob(db, env, env.BUCKET, message.body);
+        message.ack();
+      } catch {
         message.retry();
-        continue;
       }
-
-      message.ack();
     }
   },
 };

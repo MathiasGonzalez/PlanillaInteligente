@@ -10,10 +10,11 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "astro": "7.3.2"
+    "@planilla/theme": "*",
+    "astro": "7.3.3"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
-    "typescript": "5.9.2"
+    "typescript": "5.9.3"
   }
 }

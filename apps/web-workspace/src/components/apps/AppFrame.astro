@@ -1,0 +1,33 @@
+---
+import type { AppSpec } from '@planilla/apps/spec';
+
+interface Props {
+  appId: string;
+  spec: AppSpec;
+  current?: string;
+  owner: boolean;
+}
+const { appId, spec, current, owner } = Astro.props;
+---
+<header class="card app-nav">
+  <div>
+    <p class="eyebrow"><a href="/">Mis apps</a></p>
+    <h1>{spec.title}</h1>
+  </div>
+  <nav>
+    {spec.entities.map((entity) => (
+      <a class={current === entity.key ? 'on' : ''} href={`/apps/${appId}/${entity.key}`}>{entity.name}</a>
+    ))}
+    {spec.dashboards.length > 0 ? <a class={current === 'dashboard' ? 'on' : ''} href={`/apps/${appId}/dashboard`}>Resumen</a> : null}
+    {owner ? <a href={`/apps/${appId}/setup`}>Revisar</a> : null}
+    {owner ? <a href={`/apps/${appId}/evolve`}>Instrucciones</a> : null}
+    <a href={`/api/export?appId=${appId}`}>Excel</a>
+  </nav>
+</header>
+<style>
+  .app-nav { display: grid; gap: 0.75rem; }
+  h1 { margin: 0; font-size: 1.6rem; }
+  nav { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  nav a { font-family: var(--sans); font-size: 0.85rem; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 0.35rem 0.7rem; }
+  nav a.on { background: var(--accent-soft); border-color: transparent; }
+</style>

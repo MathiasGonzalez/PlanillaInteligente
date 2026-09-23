@@ -1,0 +1,16 @@
+name: Setup Pulumi
+description: Install the Pulumi CLI and isolated infra/ dependencies
+
+runs:
+  using: composite
+  steps:
+    - name: Install Pulumi CLI
+      shell: bash
+      run: |
+        curl -fsSL https://get.pulumi.com | sh
+        echo "$HOME/.pulumi/bin" >> "$GITHUB_PATH"
+
+    - name: Install infra dependencies
+      shell: bash
+      working-directory: infra
+      run: npm ci --workspaces=false

@@ -1,0 +1,6 @@
+name: planilla-inteligente-infra
+runtime:
+  name: nodejs
+  options:
+    typescript: true
+description: Cloudflare infrastructure for PlanillaInteligente (D1, KV, R2, Queues, Pages). State lives in a DIY R2 backend, not Pulumi Cloud.

@@ -1,149 +1,676 @@
 ---
-import { desc, eq } from 'drizzle-orm';
-import { spreadsheets } from '@planilla/cloudflare/d1/schema';
-import { cloudflareEnv } from '@planilla/cloudflare/env';
+import { and, desc, eq } from 'drizzle-orm';
+import { apps, organizations, workbooks } from '@planilla/cloudflare/d1/schema';
+import { formatBytes, getWorkspaceUsage } from '@planilla/apps/usage';
 import { UploadForm } from '../components/spreadsheets/UploadForm';
 import WorkspaceLayout from '../layouts/WorkspaceLayout.astro';
 
 const user = Astro.locals.user;
 const tenantId = Astro.locals.tenantId;
-if (!user || !tenantId) {
-  return Astro.redirect('/login');
-}
+if (!user || !tenantId) return Astro.redirect('/login');
+
+const [organization] = await Astro.locals.db
+  .select({ deactivatedAt: organizations.deactivatedAt })
+  .from(organizations)
+  .where(eq(organizations.id, tenantId))
+  .limit(1);
+
+const canUpload = user.role === 'owner' && !organization?.deactivatedAt;
+const usage = user.role === 'owner' ? await getWorkspaceUsage(Astro.locals.db, tenantId) : null;
 
 const rows = await Astro.locals.db
   .select({
-    id: spreadsheets.id,
-    name: spreadsheets.name,
-    originalFilename: spreadsheets.originalFilename,
-    sheetName: spreadsheets.sheetName,
+    id: apps.id,
+    name: apps.name,
+    status: apps.status,
+    currentVersion: apps.currentVersion,
+    analysisStatus: workbooks.analysisStatus,
   })
-  .from(spreadsheets)
-  .where(eq(spreadsheets.tenantId, tenantId))
-  .orderBy(desc(spreadsheets.createdAt));
+  .from(apps)
+  .leftJoin(workbooks, eq(workbooks.id, apps.workbookId))
+  .where(eq(apps.tenantId, tenantId))
+  .orderBy(desc(apps.createdAt));
+
+const files = await Astro.locals.db
+  .select({
+    id: workbooks.id,
+    filename: workbooks.originalFilename,
+    byteSize: workbooks.byteSize,
+    sheetCount: workbooks.sheetCount,
+    analysisStatus: workbooks.analysisStatus,
+    createdAt: workbooks.createdAt,
+    appId: apps.id,
+    appName: apps.name,
+    appStatus: apps.status,
+    appVersion: apps.currentVersion,
+  })
+  .from(workbooks)
+  .leftJoin(apps, and(eq(apps.workbookId, workbooks.id), eq(apps.tenantId, tenantId)))
+  .where(eq(workbooks.tenantId, tenantId))
+  .orderBy(desc(workbooks.createdAt));
+
+function fileMeta(file: (typeof files)[number]) {
+  const parts = [formatBytes(file.byteSize)];
+  if (file.sheetCount > 0) parts.push(file.sheetCount === 1 ? '1 hoja' : `${file.sheetCount} hojas`);
+  parts.push(file.createdAt.toLocaleString('es-UY', { dateStyle: 'medium', timeStyle: 'short' }));
+  return parts.join(' · ');
+}
+
+function usageMeter(used: number, limit: number) {
+  const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
+  const percent = ratio * 100;
+  const label = percent === 0
+    ? '0%'
+    : percent < 0.1
+      ? '< 0,1%'
+      : `${percent.toLocaleString('es-UY', { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`;
+  return {
+    label,
+    width: ratio === 0 ? 0 : Math.max(percent, 3),
+    tone: ratio >= 0.9 ? 'hot' : ratio >= 0.7 ? 'warm' : 'ok',
+  };
+}
 ---
 
-<WorkspaceLayout title="Workspace — PlanillaInteligente" turnstile>
-  <main class="page">
-    <header class="topbar">
+<WorkspaceLayout title="Mis apps — PlanillaInteligente">
+  <main class="home">
+    <header class="home-bar">
       <div>
         <p class="eyebrow">PlanillaInteligente</p>
-        <h1>Workspace</h1>
-        <p class="muted">{user.email}</p>
+        <h1>Mis apps</h1>
       </div>
-      <form method="post" action="/api/auth/signout">
-        <button type="submit">Cerrar sesión</button>
-      </form>
+      <div class="home-meta">
+        <p class="muted">{user.email}</p>
+        <div class="actions">
+          {user.role === 'owner' ? (
+            <>
+              <a class="button-secondary" href="/settings/billing">Plan</a>
+              <a class="button-secondary" href="/settings/members">Equipo</a>
+            </>
+          ) : null}
+          <form method="post" action="/api/auth/signout">
+            <button class="button-secondary" type="submit">Cerrar sesión</button>
+          </form>
+        </div>
+      </div>
     </header>
 
-    <section class="card">
-      <h2>Subir Excel</h2>
-      <UploadForm client:load siteKey={cloudflareEnv.TURNSTILE_SITE_KEY} />
-    </section>
+    {canUpload ? (
+      <section class="card upload-card">
+        <h2>{rows.length === 0 ? 'Subí un .xlsx para crear la primera' : 'Subí otro .xlsx'}</h2>
+        <p class="legal">No subas datos de salud, religión, política, afiliación sindical, vida sexual u origen étnico (art. 17, Ley 18.331).</p>
+        <UploadForm client:load />
+      </section>
+    ) : null}
+
+    {organization?.deactivatedAt ? (
+      <section class="card">
+        <h2>Workspace dado de baja</h2>
+        <p class="legal">Los datos se eliminan 30 días después de la baja. Podés borrar todo ahora si no querés esperar.</p>
+      </section>
+    ) : null}
 
     <section class="card">
       <h2>Planillas</h2>
-      {rows.length === 0 ? (
-        <p class="muted">Todavía no hay planillas. Subí un .xlsx para verla acá.</p>
+      {files.length === 0 ? (
+        <p class="legal">Todavía no hay planillas subidas.</p>
       ) : (
         <ul class="sheet-list">
-          {rows.map((row) => (
-            <li>
-              <a href={`/spreadsheets/${row.id}`}>{row.name}</a>
-              <span class="muted">
-                {row.originalFilename}
-                {row.sheetName ? ` · ${row.sheetName}` : ''}
-              </span>
-            </li>
-          ))}
+          {files.map((file) => {
+            const pending = file.analysisStatus === 'pending' || file.analysisStatus === 'processing';
+            const label = file.analysisStatus === 'failed' ? 'El análisis falló' : pending ? 'Analizando' : 'Lista';
+            const tone = file.analysisStatus === 'failed' ? 'bad' : pending ? 'wait' : 'live';
+            const published = file.appStatus === 'published' && (file.appVersion ?? 0) >= 1;
+            const href = file.appId
+              ? published ? `/apps/${file.appId}` : user.role === 'owner' ? `/apps/${file.appId}/setup` : null
+              : null;
+            const Row = href ? 'a' : 'div';
+            return (
+              <li class="app-row">
+                <Row class="app-link file-link" href={href ?? undefined}>
+                  <span class="app-main">
+                    <span class:list={['app-mark', tone]} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 4.2h5.2L18 9v10.2a1.6 1.6 0 0 1-1.6 1.6H8A1.6 1.6 0 0 1 6.4 19.2V5.8A1.6 1.6 0 0 1 8 4.2z" />
+                        <path d="M13 4.4V9h4.6" />
+                      </svg>
+                    </span>
+                    <span class="file-copy">
+                      <span class="app-name">{file.filename}</span>
+                      <span class="file-meta">{fileMeta(file)}{file.appName ? ` · ${file.appName}` : ''}</span>
+                    </span>
+                  </span>
+                  <span class:list={['status', tone]}>{label}</span>
+                </Row>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
+
+    {rows.length > 0 || !canUpload ? (
+      <section class="card">
+        <h2>Apps</h2>
+        {rows.length === 0 ? (
+          <p class="legal">Todavía no hay apps.</p>
+        ) : (
+          <ul class="sheet-list">
+            {rows.map((row) => {
+              const published = row.status === 'published' && row.currentVersion >= 1;
+              const href = published ? `/apps/${row.id}` : user.role === 'owner' ? `/apps/${row.id}/setup` : '/';
+              const pending = row.analysisStatus === 'pending' || row.analysisStatus === 'processing';
+              const label = row.analysisStatus === 'failed' ? 'El análisis falló' : pending ? 'Analizando' : row.status === 'draft' ? 'Falta revisar' : 'Publicada';
+              const tone = row.analysisStatus === 'failed' ? 'bad' : pending ? 'wait' : row.status === 'draft' ? 'draft' : 'live';
+              return (
+                <li class="app-row">
+                  <a class="app-link" href={href}>
+                    <span class="app-main">
+                      <span class:list={['app-mark', tone]} aria-hidden="true">
+                        {tone === 'live' ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3.5" y="4" width="17" height="16" rx="2" />
+                            <path d="M3.5 9h17M3.5 14.5h17M9.5 9v11" />
+                          </svg>
+                        ) : tone === 'bad' ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 4.2 3.6 19h16.8L12 4.2z" />
+                            <path d="M12 10v4" />
+                            <path d="M12 16.6h.01" />
+                          </svg>
+                        ) : tone === 'wait' ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="8" />
+                            <path d="M12 8.2V12l2.6 1.6" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M8 4.2h5.2L18 9v10.2a1.6 1.6 0 0 1-1.6 1.6H8A1.6 1.6 0 0 1 6.4 19.2V5.8A1.6 1.6 0 0 1 8 4.2z" />
+                            <path d="M13 4.4V9h4.6M8.6 13h6.8M8.6 16.2h4.2" />
+                          </svg>
+                        )}
+                      </span>
+                      <span class="app-name">{row.name}</span>
+                    </span>
+                    <span class:list={['status', tone]}>{label}</span>
+                  </a>
+                  {user.role === 'owner' ? (
+                    <details class="row-menu">
+                      <summary aria-label={`Acciones de ${row.name}`}>⋯</summary>
+                      <form method="post" action={`/api/apps/${row.id}/delete`} data-app-name={row.name}>
+                        <button type="submit">Borrar</button>
+                      </form>
+                    </details>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+      <script>
+        document.querySelectorAll<HTMLFormElement>('.row-menu form').forEach((form) => {
+          form.addEventListener('submit', (event) => {
+            const name = form.dataset.appName || 'esta app';
+            if (!window.confirm(`¿Borrar «${name}»? Se eliminan la app, las filas y el archivo.`)) {
+              event.preventDefault();
+            }
+          });
+        });
+
+        function closeRowMenus(except?: Element) {
+          document.querySelectorAll<HTMLDetailsElement>('.row-menu[open]').forEach((menu) => {
+            if (menu !== except) menu.open = false;
+          });
+        }
+
+        document.addEventListener('click', (event) => {
+          const target = event.target;
+          if (!(target instanceof Node)) return;
+          const inside = target instanceof Element ? target.closest('.row-menu') : null;
+          closeRowMenus(inside ?? undefined);
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') closeRowMenus();
+        });
+      </script>
+    ) : null}
+
+    {usage ? (
+      <section class="card">
+        <h2>Consumo</h2>
+        <p class="legal">Cupo del workspace. Si se llena, no entra un archivo, una fila o una llamada de IA de más.</p>
+        <ul class="usage-meters">
+          {[
+            {
+              name: 'IA',
+              meter: usageMeter(usage.ai.monthCalls, usage.ai.limit),
+              now: usage.ai.monthCalls,
+              max: usage.ai.limit,
+              detail: `${usage.ai.monthCalls.toLocaleString('es-UY')} / ${usage.ai.limit.toLocaleString('es-UY')} llamadas este mes${usage.ai.monthChars > 0 ? ` · ${usage.ai.monthChars.toLocaleString('es-UY')} caracteres` : ''}`,
+            },
+            {
+              name: 'Espacio',
+              meter: usageMeter(usage.storage.bytes, usage.storage.limit),
+              now: usage.storage.bytes,
+              max: usage.storage.limit,
+              detail: `${formatBytes(usage.storage.bytes)} / ${formatBytes(usage.storage.limit)}`,
+            },
+            {
+              name: 'D1',
+              meter: usageMeter(usage.d1.records, usage.d1.limit),
+              now: usage.d1.records,
+              max: usage.d1.limit,
+              detail: `${usage.d1.records.toLocaleString('es-UY')} / ${usage.d1.limit.toLocaleString('es-UY')} filas${usage.d1.bytes > 0 ? ` · ${formatBytes(usage.d1.bytes)}` : ''}`,
+            },
+          ].map((item, index) => (
+            <li class="usage-meter" style={`--usage-delay: ${index * 90}ms`}>
+              <div class="usage-head">
+                <span>{item.name}</span>
+                <span>{item.meter.label}</span>
+              </div>
+              <div
+                class="usage-track"
+                role="meter"
+                aria-label={item.name}
+                aria-valuemin={0}
+                aria-valuemax={item.max}
+                aria-valuenow={item.now}
+                aria-valuetext={item.detail}
+              >
+                <span class:list={['usage-fill', item.meter.tone]} style={`--usage: ${item.meter.width}%`}></span>
+              </div>
+              <p>{item.detail}</p>
+            </li>
+          ))}
+        </ul>
+        {usage.ai.totalCalls === 0 ? <p class="legal">El conteo de IA empieza desde ahora.</p> : (
+          <p class="legal">Acumulado de IA: {usage.ai.totalCalls.toLocaleString('es-UY')} llamadas · {usage.ai.totalChars.toLocaleString('es-UY')} caracteres.</p>
+        )}
+      </section>
+    ) : null}
+
+    {user.role === 'owner' ? (
+      <section class="card account">
+        <h2>Datos de la cuenta</h2>
+        <p class="legal">Dar de baja conserva los datos 30 días. Borrar la cuenta elimina el workspace, las apps y la sesión de inmediato.</p>
+        <div class="account-actions">
+          <form method="post" action="/api/account">
+            <input type="hidden" name="mode" value="deactivate" />
+            <button class="button-secondary button-danger" type="submit">Dar de baja el workspace</button>
+          </form>
+          <form method="post" action="/api/account">
+            <input type="hidden" name="mode" value="erase" />
+            <button class="button-secondary button-danger" type="submit">Borrar cuenta y datos</button>
+          </form>
+        </div>
+      </section>
+    ) : null}
   </main>
 </WorkspaceLayout>
 
 <style>
-  .page {
-    max-width: 56rem;
+  .home {
+    max-width: 44rem;
     margin: 0 auto;
-    padding: 2rem 1.25rem 4rem;
+    padding: 2.25rem 1.25rem 4rem;
     display: grid;
-    gap: 1.25rem;
+    gap: 1rem;
   }
 
-  .topbar,
+  .home-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem 1.5rem;
+    flex-wrap: wrap;
+    padding: 0.2rem 0.1rem 0.45rem;
+  }
+
+  .home-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.7rem 1rem;
+  }
+
+  .home-meta .muted {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 0.875rem;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .actions form,
+  .account-actions form {
+    margin: 0;
+  }
+
+  h1, h2 { margin: 0; }
+  h1 { margin-top: 0.2rem; font-size: clamp(1.85rem, 3vw, 2.2rem); }
+  h2 { font-size: 1.35rem; }
+
   .card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 1rem;
-    padding: 1.25rem 1.5rem;
+    box-shadow: 0 18px 40px -32px rgb(28 25 23 / 0.55);
   }
 
-  .topbar {
+  .legal {
+    margin: 0.55rem 0 0;
+    max-width: 38rem;
+    font-family: var(--sans);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .usage-meters {
+    list-style: none;
+    display: grid;
+    gap: 1rem;
+    margin: 1rem 0 0;
+    padding: 0;
+  }
+
+  .usage-meter {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .usage-head {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    align-items: flex-start;
-  }
-
-  h1,
-  h2 {
-    margin: 0.15rem 0 0;
-  }
-
-  .eyebrow {
-    margin: 0;
+    font-family: var(--sans);
     font-size: 0.75rem;
-    letter-spacing: 0.16em;
+    font-weight: 650;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #0284c7;
-    font-weight: 600;
+    color: var(--muted);
   }
 
-  .muted {
-    color: #64748b;
-    font-size: 0.9rem;
+  .usage-track {
+    overflow: hidden;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line) 80%, white);
   }
 
-  button {
-    border: 1px solid #cbd5e1;
-    background: #0f172a;
-    color: #fff;
-    border-radius: 0.75rem;
-    padding: 0.55rem 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
+  .usage-fill {
+    display: block;
+    height: 100%;
+    width: var(--usage);
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 62%, white) 100%);
+    transform: scaleX(0);
+    transform-origin: left center;
+    animation: usage-grow 0.85s cubic-bezier(0.22, 1, 0.36, 1) var(--usage-delay, 0ms) forwards;
+  }
+
+  .usage-fill.warm {
+    background: linear-gradient(90deg, #b45309 0%, #e8a15a 100%);
+  }
+
+  .usage-fill.hot {
+    background: linear-gradient(90deg, var(--warn) 0%, #e07a4a 100%);
+  }
+
+  .usage-meter p {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 0.84rem;
+    font-weight: 650;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .usage-fill {
+      transform: none;
+      animation: none;
+    }
+  }
+
+  @keyframes usage-grow {
+    to { transform: scaleX(1); }
   }
 
   .sheet-list {
     list-style: none;
-    margin: 0;
+    margin: 0.85rem 0 0;
     padding: 0;
-    display: grid;
+  }
+
+  .app-row {
+    position: relative;
+    border-top: 1px solid var(--line);
+  }
+
+  .app-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 0.75rem;
+    min-height: 3.25rem;
+    margin: 0 -0.45rem;
+    padding: 0.45rem 3.15rem 0.45rem 0.45rem;
+    border-radius: 12px;
+    font-family: var(--sans);
+    font-weight: 650;
+    text-decoration: none;
+    color: inherit;
   }
 
-  .sheet-list li {
-    display: grid;
-    gap: 0.15rem;
-  }
-
-  :global(.upload-form) {
-    display: grid;
+  .app-main {
+    display: flex;
+    align-items: center;
     gap: 0.75rem;
-    margin-top: 0.75rem;
+    min-width: 0;
   }
 
-  :global(.upload-label) {
+  .app-mark {
+    flex: 0 0 auto;
     display: grid;
-    gap: 0.35rem;
-    font-size: 0.9rem;
-    font-weight: 600;
+    place-items: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
   }
 
-  :global(.upload-error) {
+  .app-mark svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .app-mark.live {
+    background: color-mix(in srgb, var(--ok) 14%, white);
+    color: var(--ok);
+  }
+
+  .app-mark.bad {
+    background: color-mix(in srgb, var(--warn) 12%, white);
+    color: var(--warn);
+  }
+
+  .app-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-link {
+    align-items: center;
+    padding-right: 0.45rem;
+  }
+
+  .file-copy {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .app-link:hover,
+  .app-link:active {
+    background: color-mix(in srgb, var(--accent-soft) 70%, white);
+    color: inherit;
+  }
+
+  .app-link:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  .row-menu {
+    position: absolute;
+    top: 0;
+    right: -0.2rem;
+    z-index: 2;
+  }
+
+  .row-menu[open] { z-index: 4; }
+
+  .row-menu summary {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 3.25rem;
+    border-radius: 12px;
+    list-style: none;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 1.15rem;
+    line-height: 1;
+    letter-spacing: 0.02em;
+  }
+
+  .row-menu summary::-webkit-details-marker { display: none; }
+
+  .row-menu summary:hover,
+  .row-menu[open] summary {
+    background: var(--paper);
+  }
+
+  .row-menu summary:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  .row-menu form {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.2rem);
+    z-index: 3;
     margin: 0;
-    color: #be123c;
-    font-size: 0.9rem;
+    min-width: 9.5rem;
+    padding: 0.3rem;
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: 0 16px 36px -24px rgb(28 25 23 / 0.55);
+  }
+
+  .row-menu button {
+    width: 100%;
+    border: 0;
+    border-radius: 8px;
+    padding: 0.5rem 0.65rem;
+    background: transparent;
+    color: var(--warn);
+    font-family: var(--sans);
+    font-size: 0.875rem;
+    font-weight: 650;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .row-menu button:hover {
+    background: color-mix(in srgb, var(--warn) 8%, white);
+  }
+
+  .status {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 0.2rem 0.6rem;
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    font-weight: 650;
+    background: var(--line);
+    color: var(--muted);
+  }
+
+  .status.live {
+    background: color-mix(in srgb, var(--ok) 12%, white);
+    color: var(--ok);
+  }
+
+  .status.draft,
+  .status.wait {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .status.wait { animation: status-pulse 1.6s ease-in-out infinite; }
+  }
+
+  @keyframes status-pulse {
+    50% { opacity: 0.55; }
+  }
+
+  .status.bad {
+    background: color-mix(in srgb, var(--warn) 10%, white);
+    color: var(--warn);
+  }
+
+  .account-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1rem;
+  }
+
+  .button-danger {
+    border-color: color-mix(in srgb, var(--warn) 42%, var(--line));
+    color: var(--warn);
+  }
+
+  .button-danger:hover {
+    border-color: var(--warn);
+    background: color-mix(in srgb, var(--warn) 7%, white);
+  }
+
+  a.button-secondary { text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .home { padding-top: 1.35rem; }
+    .home-meta { align-items: flex-start; }
+    .app-link { min-height: 3.5rem; padding-right: 3.35rem; }
+    .row-menu summary { height: 3.5rem; width: 3rem; }
+  }
+</style>
+
+<style is:global>
+  body:has(.home) {
+    background:
+      radial-gradient(ellipse 80% 42% at 100% -8%, #e7f3ee 0%, transparent 56%),
+      radial-gradient(ellipse 48% 34% at 0% 108%, #f3ebe0 0%, transparent 52%),
+      var(--paper);
   }
 </style>

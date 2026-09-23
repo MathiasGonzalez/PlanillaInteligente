@@ -1,0 +1,110 @@
+---
+import AppFrame from '../../../components/apps/AppFrame.astro';
+import KanbanBoard from '../../../components/apps/KanbanBoard';
+import WorkspaceLayout from '../../../layouts/WorkspaceLayout.astro';
+import { listRecords, loadApp, loadSpec } from '@planilla/apps/records';
+import { entityOf, visibleFields } from '@planilla/apps/spec';
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+const appId = Astro.params.id;
+const entityKey = Astro.params.entity;
+if (!user || !tenantId || !appId || !entityKey) return Astro.redirect('/login');
+const app = await loadApp(Astro.locals.db, tenantId, appId);
+const spec = await loadSpec(Astro.locals.db, tenantId, appId);
+const entity = spec ? entityOf(spec, entityKey) : null;
+if (!app || !spec || !entity) return new Response('Not found', { status: 404 });
+const view = Astro.url.searchParams.get('view') === 'kanban' && entity.statusFieldKey ? 'kanban' : 'table';
+const search = Astro.url.searchParams.get('q') ?? '';
+const filterField = Astro.url.searchParams.get('filterField') ?? '';
+const filterValue = Astro.url.searchParams.get('filterValue') ?? '';
+const sortField = Astro.url.searchParams.get('sort');
+const sortDirection = Astro.url.searchParams.get('dir') === 'desc' ? 'desc' : 'asc';
+const page = await listRecords(Astro.locals.db, {
+  tenantId,
+  appId,
+  entityKey,
+  search,
+  filters: filterField && filterValue ? [{ fieldKey: filterField, op: 'eq', value: filterValue }] : [],
+  sortField: view === 'kanban' ? null : sortField,
+  sortDirection,
+  cursor: view === 'kanban' ? null : Astro.url.searchParams.get('cursor'),
+  limit: view === 'kanban' ? 2000 : 50,
+  restrictedKeys: entity.fields.filter((field) => field.sensitive || field.specialCategory).map((field) => field.key),
+});
+const fields = visibleFields(entity);
+const filterable = fields.filter((field) => field.type === 'status' || field.type === 'category').slice(0, 2);
+const cards = page.rows.map((row) => ({
+  id: row.id,
+  title: String(row.data[entity.primaryFieldKey ?? fields[0]?.key ?? ''] ?? row.id),
+  status: entity.statusFieldKey ? String(row.data[entity.statusFieldKey] ?? '') : '',
+}));
+const statuses = entity.statusFieldKey ? (entity.fields.find((field) => field.key === entity.statusFieldKey)?.options ?? []) : [];
+---
+<WorkspaceLayout title={`${entity.name} — ${spec.title}`}>
+  <main class="page page--wide">
+    <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
+    <section class="card toolbar">
+      <form method="get">
+        <input type="search" name="q" value={search} placeholder="Buscar" />
+        {filterable.length > 0 ? (
+          <select name="filterField">
+            {filterable.map((field) => (
+              <option value={field.key} selected={field.key === filterField}>{field.label}</option>
+            ))}
+          </select>
+        ) : null}
+        {filterable[0] ? <input name="filterValue" value={filterValue} placeholder="Filtro" /> : null}
+        <button class="button-secondary" type="submit">Filtrar</button>
+      </form>
+      <div class="actions">
+        {entity.statusFieldKey ? <a class="button-secondary" href={view === 'kanban' ? `?` : `?view=kanban`}> {view === 'kanban' ? 'Tabla' : 'Kanban'}</a> : null}
+        <a class="cta" href={`/apps/${appId}/${entity.key}/new`}>Nuevo</a>
+      </div>
+    </section>
+    {view === 'kanban' && entity.statusFieldKey ? (
+      <KanbanBoard client:load appId={appId} entityKey={entity.key} statusField={entity.statusFieldKey} statuses={statuses.length > 0 ? statuses : [...new Set(cards.map((card) => card.status).filter(Boolean))]} cards={cards} />
+    ) : (
+      <section class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>{fields.map((field) => {
+                const nextDir = sortField === field.key && sortDirection === 'asc' ? 'desc' : 'asc';
+                return <th><a href={`?sort=${field.key}&dir=${nextDir}`}>{field.label}</a></th>;
+              })}</tr>
+            </thead>
+            <tbody>
+              {page.rows.map((row) => (
+                <tr>
+                  {fields.map((field, index) => (
+                    <td>{index === 0 ? <a href={`/apps/${appId}/${entity.key}/${row.id}`}>{String(row.data[field.key] ?? '')}</a> : String(row.data[field.key] ?? '')}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <ul class="cards">
+          {page.rows.map((row) => (
+            <li><a href={`/apps/${appId}/${entity.key}/${row.id}`}>{fields.map((field) => <span>{field.label}: {String(row.data[field.key] ?? '')}</span>)}</a></li>
+          ))}
+        </ul>
+        {page.nextCursor ? <a href={`?cursor=${page.nextCursor}&q=${search}`}>Más</a> : null}
+        <p class="muted">{page.total} registros</p>
+      </section>
+    )}
+  </main>
+</WorkspaceLayout>
+<style>
+  .toolbar { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .toolbar form, .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 0.45rem; font-size: 0.9rem; }
+  .cards { display: none; list-style: none; margin: 0; padding: 0; gap: 0.75rem; }
+  .cards a { display: grid; gap: 0.2rem; text-decoration: none; color: inherit; border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem; }
+  @media (max-width: 720px) {
+    .table-wrap { display: none; }
+    .cards { display: grid; }
+  }
+</style>

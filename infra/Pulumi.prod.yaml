@@ -1,0 +1,3 @@
+config:
+  planilla-inteligente-infra:wranglerTarget: production
+  planilla-inteligente-infra:pagesProductionBranch: main

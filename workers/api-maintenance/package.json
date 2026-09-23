@@ -1,0 +1,15 @@
+{
+  "name": "@planilla/api-maintenance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@planilla/cloudflare": "*",
+    "@planilla/apps": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260922.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.136.2"
+  }
+}
