@@ -9,8 +9,6 @@
     "./parsing/validate-workbook": "./src/parsing/validate-workbook.ts"
   },
   "dependencies": {
-    "@planilla/cloudflare": "*",
-    "drizzle-orm": "0.45.3",
     "xlsx-populate": "1.21.0"
   },
   "devDependencies": {

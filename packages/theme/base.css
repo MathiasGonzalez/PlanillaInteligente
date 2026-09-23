@@ -117,6 +117,58 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.page {
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.page--narrow,
+.page--medium,
+.page--wide {
+  display: grid;
+  gap: 1rem;
+}
+
+.page--narrow {
+  max-width: 40rem;
+}
+
+.page--medium {
+  max-width: 46rem;
+}
+
+.page--wide {
+  max-width: 72rem;
+}
+
+.page--compact {
+  max-width: 40rem;
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='submit']):not([type='button']),
+select,
+textarea {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+
+.upload-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.upload-track span {
+  display: block;
+  height: 100%;
+  width: 38%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .cta,
   .button-secondary {
@@ -126,4 +178,13 @@ a:hover {
   .cta:hover {
     transform: translateY(-1px);
   }
+
+  .upload-track span {
+    animation: upload-slide 1.15s ease-in-out infinite;
+  }
+}
+
+@keyframes upload-slide {
+  0% { transform: translateX(-130%); }
+  100% { transform: translateX(340%); }
 }

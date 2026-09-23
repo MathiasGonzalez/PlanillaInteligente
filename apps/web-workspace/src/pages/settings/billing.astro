@@ -1,0 +1,61 @@
+---
+import { cloudflareEnv } from '@planilla/cloudflare/env';
+import { getBillingAccount, hasMercadopagoToken, listPayments } from '@planilla/apps/billing';
+import WorkspaceLayout from '../../layouts/WorkspaceLayout.astro';
+
+const PLAN_LABEL = { free: 'Gratis', paid: 'Pago' } as const;
+const STATUS_LABEL = {
+  none: 'Sin suscripción',
+  pending: 'Pendiente',
+  authorized: 'Activa',
+  paused: 'Pausada',
+  cancelled: 'Cancelada',
+  past_due: 'Pago atrasado',
+} as const;
+
+const user = Astro.locals.user;
+const tenantId = Astro.locals.tenantId;
+if (!user || !tenantId) return Astro.redirect('/login');
+if (user.role !== 'owner') return Astro.redirect('/');
+
+const account = await getBillingAccount(Astro.locals.db, tenantId);
+const payments = await listPayments(Astro.locals.db, tenantId);
+const connected = hasMercadopagoToken(cloudflareEnv.MERCADOPAGO_ACCESS_TOKEN);
+const plan = account?.plan ?? 'free';
+const status = account?.status ?? 'none';
+const periodEnd = account?.currentPeriodEnd
+  ? account.currentPeriodEnd.toISOString().slice(0, 10)
+  : null;
+---
+<WorkspaceLayout title="Plan — PlanillaInteligente">
+  <main class="page page--compact">
+    <p><a href="/">← Mis apps</a></p>
+    <section class="card">
+      <h1>Plan</h1>
+      <p class="muted">El workspace está en el plan {PLAN_LABEL[plan]}. Estado: {STATUS_LABEL[status]}.</p>
+      {periodEnd ? <p class="muted">El período actual termina el {periodEnd}.</p> : null}
+      <button class="cta" type="button" id="subscribe">Suscribirme</button>
+      <p id="subscribe-note" class="muted">{connected ? 'El cobro está listo para conectarse.' : 'El cobro todavía no está conectado.'}</p>
+      <h2>Pagos</h2>
+      {payments.length === 0 ? (
+        <p class="muted">Todavía no hay pagos.</p>
+      ) : (
+        <ul>
+          {payments.map((payment) => (
+            <li>
+              {payment.createdAt.toISOString().slice(0, 10)} · {(payment.amountCents / 100).toLocaleString('es-UY')} {payment.currency} · {payment.status}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  </main>
+  <script>
+    import { jsonFetch } from '../../lib/json-fetch';
+    document.querySelector('#subscribe')?.addEventListener('click', async () => {
+      const { data } = await jsonFetch<{ error?: string }>('/api/billing/subscribe', { method: 'POST' });
+      const target = document.querySelector('#subscribe-note');
+      if (target) target.textContent = data?.error ?? 'El cobro todavía no está conectado.';
+    });
+  </script>
+</WorkspaceLayout>

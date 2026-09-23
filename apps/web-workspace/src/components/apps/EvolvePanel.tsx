@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from 'react';
+import { jsonFetch } from '../../lib/json-fetch';
 
 interface Proposal {
   id: string;
@@ -15,28 +16,31 @@ export default function EvolvePanel({ appId }: { appId: string }): JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
-    const response = await fetch(`/api/apps/${appId}/proposals`);
-    const payload = await response.json() as { proposals?: Proposal[] };
-    setProposals(payload.proposals ?? []);
+    const { data } = await jsonFetch<{ proposals?: Proposal[] }>(`/api/apps/${appId}/proposals`);
+    setProposals(data?.proposals ?? []);
   }
 
   useEffect(() => { void reload(); }, [appId]);
 
   async function propose() {
     setError(null);
-    const response = await fetch(`/api/apps/${appId}/proposals`, {
+    const { ok, data } = await jsonFetch<{ explanation?: string; error?: string }>(`/api/apps/${appId}/proposals`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ instruction }),
     });
-    const payload = await response.json().catch(() => null) as { explanation?: string; error?: string } | null;
-    if (!response.ok) setError(payload?.explanation ?? payload?.error ?? 'No se pudo proponer el cambio.');
+    if (!ok) setError(data?.explanation ?? data?.error ?? 'No se pudo proponer el cambio.');
     setInstruction('');
     await reload();
   }
 
   async function act(proposalId: string, action: 'apply' | 'revert') {
-    await fetch(`/api/apps/${appId}/proposals/${proposalId}/${action}`, { method: 'POST' });
+    setError(null);
+    const { ok, data } = await jsonFetch<{ error?: string }>(`/api/apps/${appId}/proposals/${proposalId}/${action}`, { method: 'POST' });
+    if (!ok) {
+      setError(data?.error ?? (action === 'apply' ? 'No se pudo aplicar el cambio.' : 'No se pudo revertir el cambio.'));
+      return;
+    }
     await reload();
   }
 
@@ -62,7 +66,7 @@ export default function EvolvePanel({ appId }: { appId: string }): JSX.Element {
           </li>
         ))}
       </ul>
-      <style>{`.evolve{display:grid;gap:0.75rem}textarea{font:inherit;min-height:5rem;border:1px solid var(--line);border-radius:10px;padding:0.6rem}li{margin:0.6rem 0}`}</style>
+      <style>{`.evolve{display:grid;gap:0.75rem}textarea{min-height:5rem}li{margin:0.6rem 0}`}</style>
     </div>
   );
 }

@@ -41,7 +41,7 @@ export async function scheduleAppJob(
 export async function runAppJob(db: Database, env: AiEnv, bucket: R2Bucket, message: AppJobMessage) {
   if (message.kind === 'analyze') {
     try {
-      await runWorkbookAnalysis(db, env, bucket, message.tenantId, message.appId);
+      await runWorkbookAnalysis(db, env, bucket, message.tenantId, message.appId, message.requestedByUserId);
       return { status: 'completed' as const };
     } catch (error) {
       const text = error instanceof Error ? error.message : 'analysis_failed';

@@ -16,7 +16,7 @@ PlanillaInteligente es una aplicación web multi-tenant que transforma planillas
 - **Cloudflare R2** — almacenamiento de archivos `.xlsx`
 - **Cloudflare KV** — caché de sesiones
 - **Cloudflare Queue** — procesamiento asíncrono de enriquecimiento IA
-- **Workers AI** — inferencia de metadata con `@cf/meta/llama-3.1-8b-instruct`
+- **Workers AI** — inferencia de metadata con `@cf/meta/llama-3.1-8b-instruct-fast`
 - **Pulumi** — aprovisiona D1, KV, R2, Queues y proyectos Pages (`infra/`). Wrangler sigue desplegando código y migraciones.
 
 ## Comandos
@@ -95,15 +95,21 @@ packages/cloudflare/                   # Primitivas Cloudflare (1 carpeta = 1 bi
   src/queue/index.ts                   # producer sendEnrichmentJob
   src/mailer/index.ts                  # POST a send.cfemailer.com/send
   src/env.ts                           # cloudflareEnv
-packages/spreadsheets/                 # Excel: parseo multi-hoja, candidatos, export
+packages/spreadsheets/                 # Excel: parseo multi-hoja, candidatos, xlsx puro
   src/parsing/
-  src/export/
+  src/export/                          # buildWorkbookXlsx (sin D1/R2)
 packages/apps/                         # Dominio de la app (spec, records, evolución, equipo)
   src/spec.ts
   src/generation.ts
   src/records.ts
   src/dashboards.ts
-  src/evolution.ts
+  src/evolution.ts                     # propuestas; reexporta operaciones
+  src/operations.ts                    # catálogo y applySpecOperations
+  src/expressions.ts                   # fórmulas computeField
+  src/export.ts                        # orquestación D1/R2 del Excel
+  src/import.ts                        # alta de workbook + app + filas
+  src/usage.ts                         # cupos y consumo del workspace
+  src/billing.ts                       # cuenta de plan y pagos
   src/members.ts
   src/retention.ts
   src/jobs.ts
@@ -152,12 +158,12 @@ Decidir en este orden:
 
 Restricciones que se desprenden de `DATA_SECURITY.md`. El detalle y la base legal están ahí; acá va lo que un cambio de código no puede violar.
 
-- **`SESSION_KV` no almacena PII.** Solo identificadores opacos y datos de autorización (`userId`, `tenantId`, `role`, `sessionId`, `expiresAt`). El perfil se lee de D1. KV no tiene jurisdicción.
+- **`SESSION_KV` no almacena PII.** Solo identificadores opacos (`userId`, `tenantId`, `sessionId`, `expiresAt`). El perfil y el rol se leen de D1. KV no tiene jurisdicción.
 - **Los mensajes de Queue transportan referencias, nunca contenido** de celdas ni de perfil. Queues no tiene jurisdicción.
 - **El prompt de IA se arma con metadata y estadísticas.** Enviar valores reales de celdas exige opt-in por planilla registrado en `workbooks.sample_consent_at`. Nunca es el default. Columnas `sensitive` (credenciales) y `specialCategory` (art. 17 Ley 18.331) no se envían ni con opt-in.
 - **Llamadas a AI Gateway con `collectLog: false`.** Apagar también los logs en el dashboard del gateway.
 - **Los logs no contienen PII.** Se referencia por ID (`tenantId`, `appId`, `userId`).
-- **Credenciales de terceros (tokens OAuth) se persisten cifradas**, con `TOKEN_ENCRYPTION_KEY`, nunca en claro.
+- **Tokens OAuth de Google no se persisten.** Si un destino futuro guarda credenciales de terceros, van cifradas con `TOKEN_ENCRYPTION_KEY`, nunca en claro.
 - **Todo store o campo nuevo** necesita clasificación de datos y plazo de conservación declarados en `DATA_SECURITY.md`.
 - **Un destino nuevo que reciba datos personales** exige verificar adecuación según la URCDP y declarar el subencargado antes del merge.
 - **Pages no soporta** la clave `observability`, el binding `ratelimits` ni cron triggers. Observability de Pages es configuración de dashboard. Un cron va en un Worker (`workers/api-*`). El rate limiting quedó pendiente a propósito.
@@ -262,5 +268,8 @@ Las dependencias externas del producto van **sin rango** (`"wrangler": "4.136.2"
 | `ANALYSIS_MODE` | pública | `.dev.vars` = `inline` para que `npm run dev` no deje el análisis en `pending` y loguee el OTP | `wrangler.jsonc` `vars` = `queue` |
 | `EMAIL_SEND_URL` | pública | default `https://send.cfemailer.com/send` | mismo `vars` |
 | `EMAIL_API_KEY` | **secret** opcional | `.dev.vars` si la API lo exige | `wrangler pages secret put` |
+| `MERCADOPAGO_PUBLIC_KEY` | pública | `.dev.vars` / `wrangler.jsonc` `vars` (vacía hasta el checkout) | `wrangler.jsonc` `vars` |
+| `MERCADOPAGO_ACCESS_TOKEN` | **secret** opcional | `.dev.vars` cuando se conecte el cobro | `wrangler pages secret put` |
+| `MERCADOPAGO_WEBHOOK_SECRET` | **secret** opcional | `.dev.vars` cuando exista el webhook | `wrangler pages secret put` |
 
 Ver `apps/web-workspace/.dev.vars.example` para la lista completa de variables requeridas en desarrollo local del workspace.

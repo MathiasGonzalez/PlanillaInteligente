@@ -19,7 +19,7 @@ const versions = await Astro.locals.db.select({
 }).from(appSpecVersions).where(and(eq(appSpecVersions.tenantId, tenantId), eq(appSpecVersions.appId, appId))).orderBy(desc(appSpecVersions.version));
 ---
 <WorkspaceLayout title={`Instrucciones — ${spec.title}`}>
-  <main class="page">
+  <main class="page page--medium">
     <AppFrame appId={appId} spec={spec} owner={true} />
     <section class="card">
       <h2>Evolucionar la app</h2>
@@ -40,6 +40,5 @@ const versions = await Astro.locals.db.select({
   </main>
 </WorkspaceLayout>
 <style>
-  .page { max-width: 46rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
   li { display: flex; gap: 0.75rem; align-items: center; margin: 0.4rem 0; }
 </style>

@@ -1,10 +1,5 @@
 /// <reference path="../xlsx-populate.d.ts" />
 import XlsxPopulate from 'xlsx-populate';
-import { and, asc, eq } from 'drizzle-orm';
-import type { DrizzleD1Database } from 'drizzle-orm/d1';
-import { apps, records, workbooks } from '@planilla/cloudflare/d1/schema';
-import type * as schema from '@planilla/cloudflare/d1/schema';
-import { getObject } from '@planilla/cloudflare/r2';
 import { toMatrix } from '../parsing/matrix';
 
 export interface ExportSpec {
@@ -18,7 +13,11 @@ export interface ExportSpec {
   relations: Array<{ fromEntity: string; fieldKey: string; toEntity: string }>;
 }
 
-type Database = DrizzleD1Database<typeof schema>;
+export interface ExportRow {
+  id: string;
+  entityKey: string;
+  data: Record<string, unknown>;
+}
 
 function cellValue(value: unknown) {
   if (value === null || value === undefined) return null;
@@ -33,31 +32,22 @@ async function toBytes(value: Uint8Array | ArrayBuffer | Blob) {
   return new Uint8Array(value);
 }
 
-export async function exportAppWorkbook(params: {
-  db: Database;
-  tenantId: string;
-  appId: string;
+export async function buildWorkbookXlsx(params: {
   spec: ExportSpec;
-  bucket: R2Bucket;
+  rows: ExportRow[];
+  templateBytes?: ArrayBuffer | Uint8Array | null;
+  filename: string;
 }) {
-  const [app] = await params.db.select().from(apps).where(and(eq(apps.id, params.appId), eq(apps.tenantId, params.tenantId))).limit(1);
-  if (!app) throw new Error('App not found.');
-  const allRows = await params.db.select().from(records).where(and(eq(records.tenantId, params.tenantId), eq(records.appId, params.appId))).orderBy(asc(records.sourceRowIndex));
-  const byId = new Map(allRows.map((row) => [row.id, row]));
-  let workbook: Awaited<ReturnType<typeof XlsxPopulate.fromBlankAsync>>;
-  if (app.workbookId) {
-    const [stored] = await params.db.select({ r2Key: workbooks.r2Key, originalFilename: workbooks.originalFilename }).from(workbooks).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, params.tenantId))).limit(1);
-    const file = stored ? await getObject(params.bucket, stored.r2Key) : null;
-    workbook = file ? await XlsxPopulate.fromDataAsync(await file.arrayBuffer()) : await XlsxPopulate.fromBlankAsync();
-  } else {
-    workbook = await XlsxPopulate.fromBlankAsync();
-  }
+  const byId = new Map(params.rows.map((row) => [row.id, row]));
+  const workbook = params.templateBytes
+    ? await XlsxPopulate.fromDataAsync(params.templateBytes)
+    : await XlsxPopulate.fromBlankAsync();
   params.spec.entities.forEach((entity, index) => {
     const sheetName = (entity.sourceSheet ?? entity.name).slice(0, 31) || `Hoja${index + 1}`;
     const sheet = workbook.sheet(sheetName) ?? (index === 0 && workbook.sheets()[0] ? workbook.sheets()[0] : undefined) ?? workbook.addSheet(sheetName);
     const fields = entity.fields.filter((field) => !field.sensitive && !field.specialCategory);
     const header = fields.map((field) => field.label);
-    const body = allRows.filter((row) => row.entityKey === entity.key).map((row) => fields.map((field) => {
+    const body = params.rows.filter((row) => row.entityKey === entity.key).map((row) => fields.map((field) => {
       const value = row.data[field.key];
       if (field.type === 'relation' && typeof value === 'string') {
         const target = byId.get(value);
@@ -81,7 +71,7 @@ export async function exportAppWorkbook(params: {
   });
   const buffer = await workbook.outputAsync({ type: 'uint8array' });
   return {
-    filename: `${app.name || 'app'}.xlsx`,
+    filename: params.filename.endsWith('.xlsx') ? params.filename : `${params.filename}.xlsx`,
     contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     bytes: await toBytes(buffer),
   };

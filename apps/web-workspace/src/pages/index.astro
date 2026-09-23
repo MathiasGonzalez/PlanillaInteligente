@@ -1,6 +1,7 @@
 ---
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { apps, organizations, workbooks } from '@planilla/cloudflare/d1/schema';
+import { formatBytes, getWorkspaceUsage } from '@planilla/apps/usage';
 import { UploadForm } from '../components/spreadsheets/UploadForm';
 import WorkspaceLayout from '../layouts/WorkspaceLayout.astro';
 
@@ -15,6 +16,7 @@ const [organization] = await Astro.locals.db
   .limit(1);
 
 const canUpload = user.role === 'owner' && !organization?.deactivatedAt;
+const usage = user.role === 'owner' ? await getWorkspaceUsage(Astro.locals.db, tenantId) : null;
 
 const rows = await Astro.locals.db
   .select({
@@ -28,6 +30,46 @@ const rows = await Astro.locals.db
   .leftJoin(workbooks, eq(workbooks.id, apps.workbookId))
   .where(eq(apps.tenantId, tenantId))
   .orderBy(desc(apps.createdAt));
+
+const files = await Astro.locals.db
+  .select({
+    id: workbooks.id,
+    filename: workbooks.originalFilename,
+    byteSize: workbooks.byteSize,
+    sheetCount: workbooks.sheetCount,
+    analysisStatus: workbooks.analysisStatus,
+    createdAt: workbooks.createdAt,
+    appId: apps.id,
+    appName: apps.name,
+    appStatus: apps.status,
+    appVersion: apps.currentVersion,
+  })
+  .from(workbooks)
+  .leftJoin(apps, and(eq(apps.workbookId, workbooks.id), eq(apps.tenantId, tenantId)))
+  .where(eq(workbooks.tenantId, tenantId))
+  .orderBy(desc(workbooks.createdAt));
+
+function fileMeta(file: (typeof files)[number]) {
+  const parts = [formatBytes(file.byteSize)];
+  if (file.sheetCount > 0) parts.push(file.sheetCount === 1 ? '1 hoja' : `${file.sheetCount} hojas`);
+  parts.push(file.createdAt.toLocaleString('es-UY', { dateStyle: 'medium', timeStyle: 'short' }));
+  return parts.join(' · ');
+}
+
+function usageMeter(used: number, limit: number) {
+  const ratio = limit > 0 ? Math.min(1, used / limit) : 0;
+  const percent = ratio * 100;
+  const label = percent === 0
+    ? '0%'
+    : percent < 0.1
+      ? '< 0,1%'
+      : `${percent.toLocaleString('es-UY', { maximumFractionDigits: percent < 10 ? 1 : 0 })}%`;
+  return {
+    label,
+    width: ratio === 0 ? 0 : Math.max(percent, 3),
+    tone: ratio >= 0.9 ? 'hot' : ratio >= 0.7 ? 'warm' : 'ok',
+  };
+}
 ---
 
 <WorkspaceLayout title="Mis apps — PlanillaInteligente">
@@ -40,7 +82,12 @@ const rows = await Astro.locals.db
       <div class="home-meta">
         <p class="muted">{user.email}</p>
         <div class="actions">
-          {user.role === 'owner' ? <a class="button-secondary" href="/settings/members">Equipo</a> : null}
+          {user.role === 'owner' ? (
+            <>
+              <a class="button-secondary" href="/settings/billing">Plan</a>
+              <a class="button-secondary" href="/settings/members">Equipo</a>
+            </>
+          ) : null}
           <form method="post" action="/api/auth/signout">
             <button class="button-secondary" type="submit">Cerrar sesión</button>
           </form>
@@ -63,6 +110,45 @@ const rows = await Astro.locals.db
       </section>
     ) : null}
 
+    <section class="card">
+      <h2>Planillas</h2>
+      {files.length === 0 ? (
+        <p class="legal">Todavía no hay planillas subidas.</p>
+      ) : (
+        <ul class="sheet-list">
+          {files.map((file) => {
+            const pending = file.analysisStatus === 'pending' || file.analysisStatus === 'processing';
+            const label = file.analysisStatus === 'failed' ? 'El análisis falló' : pending ? 'Analizando' : 'Lista';
+            const tone = file.analysisStatus === 'failed' ? 'bad' : pending ? 'wait' : 'live';
+            const published = file.appStatus === 'published' && (file.appVersion ?? 0) >= 1;
+            const href = file.appId
+              ? published ? `/apps/${file.appId}` : user.role === 'owner' ? `/apps/${file.appId}/setup` : null
+              : null;
+            const Row = href ? 'a' : 'div';
+            return (
+              <li class="app-row">
+                <Row class="app-link file-link" href={href ?? undefined}>
+                  <span class="app-main">
+                    <span class:list={['app-mark', tone]} aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 4.2h5.2L18 9v10.2a1.6 1.6 0 0 1-1.6 1.6H8A1.6 1.6 0 0 1 6.4 19.2V5.8A1.6 1.6 0 0 1 8 4.2z" />
+                        <path d="M13 4.4V9h4.6" />
+                      </svg>
+                    </span>
+                    <span class="file-copy">
+                      <span class="app-name">{file.filename}</span>
+                      <span class="file-meta">{fileMeta(file)}{file.appName ? ` · ${file.appName}` : ''}</span>
+                    </span>
+                  </span>
+                  <span class:list={['status', tone]}>{label}</span>
+                </Row>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+
     {rows.length > 0 || !canUpload ? (
       <section class="card">
         <h2>Apps</h2>
@@ -71,14 +157,41 @@ const rows = await Astro.locals.db
         ) : (
           <ul class="sheet-list">
             {rows.map((row) => {
-              const href = row.currentVersion < 1 ? '/' : row.status === 'draft' ? `/apps/${row.id}/setup` : `/apps/${row.id}`;
+              const published = row.status === 'published' && row.currentVersion >= 1;
+              const href = published ? `/apps/${row.id}` : user.role === 'owner' ? `/apps/${row.id}/setup` : '/';
               const pending = row.analysisStatus === 'pending' || row.analysisStatus === 'processing';
               const label = row.analysisStatus === 'failed' ? 'El análisis falló' : pending ? 'Analizando' : row.status === 'draft' ? 'Falta revisar' : 'Publicada';
               const tone = row.analysisStatus === 'failed' ? 'bad' : pending ? 'wait' : row.status === 'draft' ? 'draft' : 'live';
               return (
                 <li class="app-row">
                   <a class="app-link" href={href}>
-                    <span class="app-name">{row.name}</span>
+                    <span class="app-main">
+                      <span class:list={['app-mark', tone]} aria-hidden="true">
+                        {tone === 'live' ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3.5" y="4" width="17" height="16" rx="2" />
+                            <path d="M3.5 9h17M3.5 14.5h17M9.5 9v11" />
+                          </svg>
+                        ) : tone === 'bad' ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 4.2 3.6 19h16.8L12 4.2z" />
+                            <path d="M12 10v4" />
+                            <path d="M12 16.6h.01" />
+                          </svg>
+                        ) : tone === 'wait' ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="8" />
+                            <path d="M12 8.2V12l2.6 1.6" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M8 4.2h5.2L18 9v10.2a1.6 1.6 0 0 1-1.6 1.6H8A1.6 1.6 0 0 1 6.4 19.2V5.8A1.6 1.6 0 0 1 8 4.2z" />
+                            <path d="M13 4.4V9h4.6M8.6 13h6.8M8.6 16.2h4.2" />
+                          </svg>
+                        )}
+                      </span>
+                      <span class="app-name">{row.name}</span>
+                    </span>
                     <span class:list={['status', tone]}>{label}</span>
                   </a>
                   {user.role === 'owner' ? (
@@ -122,6 +235,60 @@ const rows = await Astro.locals.db
           if (event.key === 'Escape') closeRowMenus();
         });
       </script>
+    ) : null}
+
+    {usage ? (
+      <section class="card">
+        <h2>Consumo</h2>
+        <p class="legal">Cupo del workspace. Si se llena, no entra un archivo, una fila o una llamada de IA de más.</p>
+        <ul class="usage-meters">
+          {[
+            {
+              name: 'IA',
+              meter: usageMeter(usage.ai.monthCalls, usage.ai.limit),
+              now: usage.ai.monthCalls,
+              max: usage.ai.limit,
+              detail: `${usage.ai.monthCalls.toLocaleString('es-UY')} / ${usage.ai.limit.toLocaleString('es-UY')} llamadas este mes${usage.ai.monthChars > 0 ? ` · ${usage.ai.monthChars.toLocaleString('es-UY')} caracteres` : ''}`,
+            },
+            {
+              name: 'Espacio',
+              meter: usageMeter(usage.storage.bytes, usage.storage.limit),
+              now: usage.storage.bytes,
+              max: usage.storage.limit,
+              detail: `${formatBytes(usage.storage.bytes)} / ${formatBytes(usage.storage.limit)}`,
+            },
+            {
+              name: 'D1',
+              meter: usageMeter(usage.d1.records, usage.d1.limit),
+              now: usage.d1.records,
+              max: usage.d1.limit,
+              detail: `${usage.d1.records.toLocaleString('es-UY')} / ${usage.d1.limit.toLocaleString('es-UY')} filas${usage.d1.bytes > 0 ? ` · ${formatBytes(usage.d1.bytes)}` : ''}`,
+            },
+          ].map((item, index) => (
+            <li class="usage-meter" style={`--usage-delay: ${index * 90}ms`}>
+              <div class="usage-head">
+                <span>{item.name}</span>
+                <span>{item.meter.label}</span>
+              </div>
+              <div
+                class="usage-track"
+                role="meter"
+                aria-label={item.name}
+                aria-valuemin={0}
+                aria-valuemax={item.max}
+                aria-valuenow={item.now}
+                aria-valuetext={item.detail}
+              >
+                <span class:list={['usage-fill', item.meter.tone]} style={`--usage: ${item.meter.width}%`}></span>
+              </div>
+              <p>{item.detail}</p>
+            </li>
+          ))}
+        </ul>
+        {usage.ai.totalCalls === 0 ? <p class="legal">El conteo de IA empieza desde ahora.</p> : (
+          <p class="legal">Acumulado de IA: {usage.ai.totalCalls.toLocaleString('es-UY')} llamadas · {usage.ai.totalChars.toLocaleString('es-UY')} caracteres.</p>
+        )}
+      </section>
     ) : null}
 
     {user.role === 'owner' ? (
@@ -203,6 +370,75 @@ const rows = await Astro.locals.db
     color: var(--muted);
   }
 
+  .usage-meters {
+    list-style: none;
+    display: grid;
+    gap: 1rem;
+    margin: 1rem 0 0;
+    padding: 0;
+  }
+
+  .usage-meter {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .usage-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-family: var(--sans);
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .usage-track {
+    overflow: hidden;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--line) 80%, white);
+  }
+
+  .usage-fill {
+    display: block;
+    height: 100%;
+    width: var(--usage);
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 62%, white) 100%);
+    transform: scaleX(0);
+    transform-origin: left center;
+    animation: usage-grow 0.85s cubic-bezier(0.22, 1, 0.36, 1) var(--usage-delay, 0ms) forwards;
+  }
+
+  .usage-fill.warm {
+    background: linear-gradient(90deg, #b45309 0%, #e8a15a 100%);
+  }
+
+  .usage-fill.hot {
+    background: linear-gradient(90deg, var(--warn) 0%, #e07a4a 100%);
+  }
+
+  .usage-meter p {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 0.84rem;
+    font-weight: 650;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .usage-fill {
+      transform: none;
+      animation: none;
+    }
+  }
+
+  @keyframes usage-grow {
+    to { transform: scaleX(1); }
+  }
+
   .sheet-list {
     list-style: none;
     margin: 0.85rem 0 0;
@@ -229,11 +465,64 @@ const rows = await Astro.locals.db
     color: inherit;
   }
 
+  .app-main {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .app-mark {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .app-mark svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .app-mark.live {
+    background: color-mix(in srgb, var(--ok) 14%, white);
+    color: var(--ok);
+  }
+
+  .app-mark.bad {
+    background: color-mix(in srgb, var(--warn) 12%, white);
+    color: var(--warn);
+  }
+
   .app-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .file-link {
+    align-items: center;
+    padding-right: 0.45rem;
+  }
+
+  .file-copy {
+    display: grid;
+    gap: 0.1rem;
+    min-width: 0;
+  }
+
+  .file-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--muted);
   }
 
   .app-link:hover,

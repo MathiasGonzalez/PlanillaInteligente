@@ -83,16 +83,29 @@ export async function purgeExpiredSessions(db: Database, kv: KVNamespace | undef
 
 export async function purgeOperationalResidue(db: Database, now = new Date()) {
   const challenges = await db.delete(emailLoginChallenges).where(lt(emailLoginChallenges.createdAt, new Date(now.getTime() - CHALLENGE_RETENTION_MS)));
-  await db.delete(invitations).where(and(lt(invitations.expiresAt, now), isNull(invitations.acceptedAt)));
-  await db.delete(recordChanges).where(lt(recordChanges.createdAt, new Date(now.getTime() - CHANGE_RETENTION_MS)));
-  await db.delete(appChangeProposals).where(and(
-    lt(appChangeProposals.createdAt, new Date(now.getTime() - PROPOSAL_RETENTION_MS)),
-    or(
-      eq(appChangeProposals.status, 'pending'),
-      eq(appChangeProposals.status, 'rejected'),
-      eq(appChangeProposals.status, 'failed'),
-      eq(appChangeProposals.status, 'stale'),
-    ),
-  ));
+  const tenants = await db.select({ id: organizations.id }).from(organizations);
+  const changeCutoff = new Date(now.getTime() - CHANGE_RETENTION_MS);
+  const proposalCutoff = new Date(now.getTime() - PROPOSAL_RETENTION_MS);
+  for (const tenant of tenants) {
+    await db.delete(invitations).where(and(
+      eq(invitations.tenantId, tenant.id),
+      lt(invitations.expiresAt, now),
+      isNull(invitations.acceptedAt),
+    ));
+    await db.delete(recordChanges).where(and(
+      eq(recordChanges.tenantId, tenant.id),
+      lt(recordChanges.createdAt, changeCutoff),
+    ));
+    await db.delete(appChangeProposals).where(and(
+      eq(appChangeProposals.tenantId, tenant.id),
+      lt(appChangeProposals.createdAt, proposalCutoff),
+      or(
+        eq(appChangeProposals.status, 'pending'),
+        eq(appChangeProposals.status, 'rejected'),
+        eq(appChangeProposals.status, 'failed'),
+        eq(appChangeProposals.status, 'stale'),
+      ),
+    ));
+  }
   return { challenges: challenges.meta?.changes ?? 0 };
 }

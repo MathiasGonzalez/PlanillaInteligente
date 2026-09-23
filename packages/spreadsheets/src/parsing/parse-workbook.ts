@@ -42,21 +42,26 @@ export interface ParsedWorkbook {
   candidates: RelationCandidate[];
 }
 
-function slugify(value: string, index: number, seen: Map<string, number>) {
-  const base = value
+const KEY_MAX_LENGTH = 64;
+const ENTITY_KEY_MAX_LENGTH = 57;
+
+function slugify(value: string, index: number, seen: Map<string, number>, maxLength = KEY_MAX_LENGTH) {
+  const normalized = value
     .trim()
     .toLowerCase()
     .normalize('NFKD')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '') || `column_${index + 1}`;
-  const occurrence = (seen.get(base) ?? 0) + 1;
-  seen.set(base, occurrence);
-  const key = occurrence === 1 ? base : `${base}_${occurrence}`;
-  return /^[a-z]/.test(key) ? key : `c_${key}`;
+  const stem = (/^[a-z]/.test(normalized) ? normalized : `c_${normalized}`).slice(0, maxLength);
+  const occurrence = (seen.get(stem) ?? 0) + 1;
+  seen.set(stem, occurrence);
+  const suffix = occurrence === 1 ? '' : `_${occurrence}`;
+  const key = `${stem.slice(0, Math.max(1, maxLength - suffix.length)).replace(/_+$/g, '')}${suffix}`;
+  return key.length > 0 && /^[a-z]/.test(key) ? key.slice(0, maxLength) : `c${index + 1}`;
 }
 
 function uniqueEntityKey(name: string, seen: Map<string, number>) {
-  return slugify(name, seen.size, seen);
+  return slugify(name, seen.size, seen, ENTITY_KEY_MAX_LENGTH);
 }
 
 interface NormalizedCell {

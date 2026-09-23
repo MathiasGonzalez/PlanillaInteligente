@@ -17,7 +17,7 @@ const widgets = await Promise.all((spec.dashboards[0]?.widgets ?? []).map(async 
 const max = Math.max(1, ...widgets.flatMap((item) => item.points.map((point) => point.value)));
 ---
 <WorkspaceLayout title={`Resumen — ${spec.title}`}>
-  <main class="page">
+  <main class="page page--wide">
     <AppFrame appId={appId} spec={spec} current="dashboard" owner={user.role === 'owner'} />
     <section class="widgets">
       {widgets.map(({ widget, points }) => (
@@ -43,7 +43,6 @@ const max = Math.max(1, ...widgets.flatMap((item) => item.points.map((point) => 
   </main>
 </WorkspaceLayout>
 <style>
-  .page { max-width: 72rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
   .widgets { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
   .kpi { font-size: 2.4rem; margin: 0; }
   svg { width: 100%; height: auto; }

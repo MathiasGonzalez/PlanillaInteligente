@@ -24,6 +24,9 @@ declare namespace Cloudflare {
     ANALYSIS_MODE?: string;
     EMAIL_SEND_URL?: string;
     EMAIL_API_KEY?: string;
+    MERCADOPAGO_ACCESS_TOKEN?: string;
+    MERCADOPAGO_WEBHOOK_SECRET?: string;
+    MERCADOPAGO_PUBLIC_KEY?: string;
     AI?: WorkersAiBinding;
     ENRICHMENT_QUEUE?: QueueBinding<import('@planilla/apps/jobs').AppJobMessage>;
   }

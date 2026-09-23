@@ -17,12 +17,15 @@ D1 y R2 no llevan pin de jurisdicción: Cloudflare elige la región al crear el 
 
 - KV de sesión: `userId`, `tenantId`, `sessionId`, `expiresAt`. Sin PII.
 - Cola: `{ kind, tenantId, appId, refId, requestedByUserId }`. La DLQ loguea `tenantId` y `appId`.
-- R2: `{tenantId}/workbooks/{id}.xlsx`. El consumer de análisis tiene D1, R2 y AI. No tiene KV.
+- R2: `{tenantId}/workbooks/{id}.xlsx`. El consumer (`analyze` y `apply-proposal`) tiene D1, R2 y AI. No tiene KV.
 - Queries operativas con `eq(table.tenantId, locals.tenantId)`.
 - Tokens OAuth de Google no se persisten. El login por email guarda HMAC del email y del código (`AUTH_HMAC_KEY`), nunca el código en claro.
-- IA: metadata y ejemplos sintéticos. Celdas reales solo con `sampleConsentAt`. `sensitive` y `specialCategory` no se envían ni con opt-in. `collectLog: false`. La instrucción de evolución es N2 y no lleva valores de celdas.
+- IA: metadata y estadísticas. Sin opt-in no hay `samples`. Celdas reales solo con `sampleConsentAt` (hasta 25 filas, 5 por hoja). `sensitive` y `specialCategory` no se envían ni con opt-in. `collectLog: false`. La instrucción de evolución es N2 y no lleva valores de celdas.
 - Login por email: `POST https://send.cfemailer.com/send` recibe el email y el código (subencargado). En local el código no sale del proceso.
-- Upload: aviso del art. 17, ZIP/OOXML, 10 MB, 200 columnas, 10.000 filas, hasta 10 hojas.
+- Upload: aviso del art. 17, ZIP/OOXML, 10 MB, 200 columnas, 10.000 filas, hasta 10 hojas. El workspace suma 100 MB de archivos, 50.000 filas y 100 llamadas de IA al mes; al tope se rechaza la acción.
+- `ai_usage`: N1 (ids, kind, conteos de caracteres). Sin texto del prompt ni de la respuesta. Plazo igual al del workspace.
+- `billing_accounts` y `payments`: N1 (plan, estado, ids de Mercado Pago, monto, moneda). Sin tarjeta, token ni email del pagador. Plazo igual al del workspace.
+- Mercado Pago: destino futuro. No recibe datos hasta el PR que haga la llamada. Declararlo como subencargado antes de conectar el cobro.
 - Errores de API genéricos con id de correlación. El upload sí devuelve el error de validación del archivo.
 - Borrar app (owner), erase inmediato y baja a 30 días (`deactivatedAt` + cron).
 - Cabeceras CSP/HSTS. Cookies `httpOnly`, `sameSite: lax`, `secure` fuera de localhost. Sesión 7 días.
@@ -36,6 +39,7 @@ D1 y R2 no llevan pin de jurisdicción: Cloudflare elige la región al crear el 
 | `record_changes` | 180 días |
 | Propuesta no aplicada | 30 días |
 | Planilla | Mientras el cliente la conserve |
+| `ai_usage`, `billing_accounts`, `payments` | Mientras el workspace exista |
 | Cuenta activa / dada de baja | El contrato / 30 días |
 | Logs de Workers | 3 días (Free) o 7 (Paid) |
 | Registro de incidentes | 5 años, fuera del producto |
@@ -55,7 +59,7 @@ Vulneración (Decreto 64/020 arts. 3 y 4): mitigar en 24 h, URCDP en 72 h, titul
 - Transferencia a Cloudflare (DPF, Res. URCDP 63/023) y DPA con SCC. Sin pin de jurisdicción en D1 ni R2.
 - KV sin PII. Cola sin celdas. Logs sin PII.
 - Celdas reales al modelo solo con opt-in. `sensitive` y `specialCategory` nunca.
-- Tokens cifrados. Secretos fuera de `wrangler.jsonc`. `collectLog: false`.
+- Tokens OAuth de Google no se persisten. Secretos fuera de `wrangler.jsonc`. `collectLog: false`.
 - Store nuevo: clasificación y plazo antes del merge. Destino nuevo: adecuación URCDP y subencargado declarado.
 - Borrado del titular: inmediato. Baja comercial: 30 días.
 - Datos de producción no se copian a dev ni preview.

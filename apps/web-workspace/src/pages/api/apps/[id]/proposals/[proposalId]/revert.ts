@@ -1,11 +1,12 @@
 import type { APIRoute } from 'astro';
-import { requireOwner } from '../../../../../../lib/access';
+import { missingParams, ownerSession } from '../../../../../../lib/access';
 import { fail, json } from '../../../../../../app/http/responses';
 import { revertProposal } from '@planilla/apps/evolution';
 
 export const POST: APIRoute = async ({ locals, params }) => {
-  const session = requireOwner(locals);
-  if (!session || !params.id || !params.proposalId) return json({ error: 'Unauthorized' }, 401);
+  const session = ownerSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id || !params.proposalId) return missingParams();
   try {
     const reverted = await revertProposal(locals.db, {
       tenantId: session.tenantId,

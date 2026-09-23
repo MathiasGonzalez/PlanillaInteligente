@@ -21,7 +21,7 @@ const statusOptions = statusKey ? (entity.fields.find((field) => field.key === s
 const currentStatus = statusKey ? String(row.data[statusKey] ?? '') : '';
 ---
 <WorkspaceLayout title={`${entity.name} — ${spec.title}`}>
-  <main class="page">
+  <main class="page page--narrow">
     <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
     <p><a href={`/apps/${appId}/${entity.key}`}>← Volver a la lista</a></p>
     <section class="card">
@@ -59,6 +59,7 @@ const currentStatus = statusKey ? String(row.data[statusKey] ?? '') : '';
         <a class="cta" href={`/apps/${appId}/${entity.key}/${recordId}/edit`}>Editar</a>
         <button class="button-secondary" type="button" id="delete-record" data-app={appId} data-entity={entity.key} data-record={recordId}>Borrar</button>
       </p>
+      <p class="alert" id="record-error" hidden></p>
     </section>
     {incoming.map((group) => (
       <section class="card">
@@ -77,26 +78,42 @@ const currentStatus = statusKey ? String(row.data[statusKey] ?? '') : '';
   </main>
 </WorkspaceLayout>
 <script>
+  import { jsonFetch } from '../../../../lib/json-fetch';
+
+  function showError(message: string) {
+    const target = document.querySelector<HTMLElement>('#record-error');
+    if (!target) return;
+    target.hidden = false;
+    target.textContent = message;
+  }
+
   const statusButton = document.querySelector<HTMLButtonElement>('#save-status');
   statusButton?.addEventListener('click', async () => {
     const select = document.querySelector('select[name="status"]');
     if (!statusButton.dataset.app || !statusButton.dataset.field || !(select instanceof HTMLSelectElement)) return;
-    await fetch(`/api/apps/${statusButton.dataset.app}/records/${statusButton.dataset.record}`, {
+    const { ok, data } = await jsonFetch<{ error?: string }>(`/api/apps/${statusButton.dataset.app}/records/${statusButton.dataset.record}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { [statusButton.dataset.field]: select.value } }),
     });
+    if (!ok) {
+      showError(data?.error ?? 'No se pudo guardar el estado.');
+      return;
+    }
     window.location.reload();
   });
   const deleteButton = document.querySelector<HTMLButtonElement>('#delete-record');
   deleteButton?.addEventListener('click', async () => {
     if (!deleteButton.dataset.app || !confirm('¿Borrar este registro?')) return;
-    await fetch(`/api/apps/${deleteButton.dataset.app}/records/${deleteButton.dataset.record}`, { method: 'DELETE' });
+    const { ok, data } = await jsonFetch<{ error?: string }>(`/api/apps/${deleteButton.dataset.app}/records/${deleteButton.dataset.record}`, { method: 'DELETE' });
+    if (!ok) {
+      showError(data?.error ?? 'No se pudo borrar el registro.');
+      return;
+    }
     window.location.href = `/apps/${deleteButton.dataset.app}/${deleteButton.dataset.entity}`;
   });
 </script>
 <style>
-  .page { max-width: 40rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
   dl { display: grid; gap: 0.6rem; }
   dt { font-family: var(--sans); font-size: 0.75rem; text-transform: uppercase; color: var(--muted); }
   dd { margin: 0; }

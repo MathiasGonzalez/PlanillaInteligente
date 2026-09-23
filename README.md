@@ -71,6 +71,7 @@ Otras claves, todas en `.dev.vars` en local y `wrangler pages secret put` en pro
 - `WORKERS_AI_MODEL` y `AI_GATEWAY_ID`: públicas, en `vars`. Gateway vacío llama a Workers AI directo. Con id, el código manda `collectLog: false`. Apagá también los logs en el dashboard.
 - `PUBLIC_APP_URL`: env de build de la landing. Local: `http://localhost:4321`.
 - `EMAIL_SEND_URL`: pública, default `https://send.cfemailer.com/send`. `EMAIL_API_KEY`: secret opcional.
+- `MERCADOPAGO_PUBLIC_KEY`: pública, vacía en `vars` hasta el checkout. `MERCADOPAGO_ACCESS_TOKEN` y `MERCADOPAGO_WEBHOOK_SECRET`: secretos a cargar con `wrangler pages secret put` cuando se conecte Mercado Pago. En local van comentados en `.dev.vars.example`.
 
 El consumer no usa Google ni Turnstile. El de mantenimiento tampoco.
 
@@ -190,7 +191,7 @@ El CTA de la landing en CI puede recibir `PUBLIC_APP_URL` apuntando al workspace
 
 Setup desde cero: `PROVISIONING.md`. Convenciones: `AGENTS.md`. Producto: `MVP_PROPOSED.md`. Estado: `MVP_STATUS.md`. Datos: `DATA_SECURITY.md`.
 
-El workspace autentica, guarda el `.xlsx` en R2 y las filas en D1. Con `ANALYSIS_MODE=queue` encola el análisis. El consumer lee R2, escribe la spec y puede llamar a Workers AI. En local el análisis corre en el request. El código de login se envía a `send.cfemailer.com`.
+El workspace autentica, guarda el `.xlsx` en R2 y las filas en D1. Con `ANALYSIS_MODE=queue` encola el análisis y, si una instrucción toca más de 2000 filas, también el apply. El consumer lee R2, escribe la spec y puede llamar a Workers AI. En local el análisis y el apply grande corren en el request. El código de login se envía a `send.cfemailer.com`.
 
 
 

@@ -17,7 +17,7 @@ const fields = visibleFields(entity);
 const initial = Object.fromEntries(fields.map((field) => [field.key, String(row.data[field.key] ?? '')]));
 ---
 <WorkspaceLayout title={`Editar — ${entity.name}`}>
-  <main class="page">
+  <main class="page page--narrow">
     <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
     <p><a href={`/apps/${appId}/${entity.key}/${recordId}`}>← Volver a la ficha</a></p>
     <section class="card">
@@ -25,6 +25,4 @@ const initial = Object.fromEntries(fields.map((field) => [field.key, String(row.
     </section>
   </main>
 </WorkspaceLayout>
-<style>
-  .page { max-width: 40rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
-</style>
+

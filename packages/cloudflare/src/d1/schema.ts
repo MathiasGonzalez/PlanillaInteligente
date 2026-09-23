@@ -6,6 +6,9 @@ export const SPEC_SOURCES = ['heuristic', 'ai', 'wizard', 'instruction', 'restor
 export const RECORD_OPS = ['create', 'update', 'delete'] as const;
 export const PROPOSAL_STATUSES = ['pending', 'processing', 'applied', 'rejected', 'failed', 'stale'] as const;
 export const MEMBERSHIP_ROLES = ['owner', 'member'] as const;
+export const AI_USAGE_KINDS = ['analyze', 'evolve'] as const;
+export const BILLING_PLANS = ['free', 'paid'] as const;
+export const BILLING_STATUSES = ['none', 'pending', 'authorized', 'paused', 'cancelled', 'past_due'] as const;
 
 export type AppStatus = (typeof APP_STATUSES)[number];
 export type AnalysisStatus = (typeof ANALYSIS_STATUSES)[number];
@@ -13,6 +16,9 @@ export type SpecSource = (typeof SPEC_SOURCES)[number];
 export type RecordOp = (typeof RECORD_OPS)[number];
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 export type MembershipRole = (typeof MEMBERSHIP_ROLES)[number];
+export type AiUsageKind = (typeof AI_USAGE_KINDS)[number];
+export type BillingPlan = (typeof BILLING_PLANS)[number];
+export type BillingStatus = (typeof BILLING_STATUSES)[number];
 
 const timestamps = {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
@@ -124,6 +130,7 @@ export const workbooks = sqliteTable('workbooks', {
   uploadedByUserId: text('uploaded_by_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   originalFilename: text('original_filename').notNull(),
   r2Key: text('r2_key').notNull(),
+  byteSize: integer('byte_size').notNull(),
   checksum: text('checksum'),
   sheetCount: integer('sheet_count').notNull().default(0),
   analysisStatus: text('analysis_status', { enum: ANALYSIS_STATUSES }).notNull().default('pending'),
@@ -214,4 +221,39 @@ export const appChangeProposals = sqliteTable('app_change_proposals', {
 }, (table) => [
   index('app_change_proposals_app_idx').on(table.tenantId, table.appId),
   index('app_change_proposals_status_idx').on(table.status, table.createdAt),
+]);
+
+export const aiUsage = sqliteTable('ai_usage', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  kind: text('kind', { enum: AI_USAGE_KINDS }).notNull(),
+  inputChars: integer('input_chars').notNull(),
+  outputChars: integer('output_chars').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  index('ai_usage_tenant_created_idx').on(table.tenantId, table.createdAt),
+]);
+
+export const billingAccounts = sqliteTable('billing_accounts', {
+  organizationId: text('organization_id').primaryKey().references(() => organizations.id, { onDelete: 'cascade' }),
+  plan: text('plan', { enum: BILLING_PLANS }).notNull().default('free'),
+  status: text('status', { enum: BILLING_STATUSES }).notNull().default('none'),
+  mpPayerId: text('mp_payer_id'),
+  mpPreapprovalId: text('mp_preapproval_id'),
+  currentPeriodEnd: integer('current_period_end', { mode: 'timestamp_ms' }),
+  ...timestamps,
+});
+
+export const payments = sqliteTable('payments', {
+  id: text('id').primaryKey(),
+  tenantId: text('tenant_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  mpPaymentId: text('mp_payment_id').notNull(),
+  status: text('status').notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  currency: text('currency').notNull().default('UYU'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).$defaultFn(() => new Date()).notNull(),
+}, (table) => [
+  uniqueIndex('payments_mp_payment_id_idx').on(table.mpPaymentId),
+  index('payments_tenant_idx').on(table.tenantId),
 ]);

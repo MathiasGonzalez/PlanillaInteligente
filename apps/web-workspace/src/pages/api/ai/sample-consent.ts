@@ -1,11 +1,11 @@
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
 import { apps, workbooks } from '@planilla/cloudflare/d1/schema';
-import { requireOwner } from '../../../lib/access';
+import { ownerSession, requireUser } from '../../../lib/access';
 
 export const POST: APIRoute = async ({ request, locals, redirect }) => {
-  const session = requireOwner(locals);
-  if (!session) return redirect('/login');
+  const session = ownerSession(locals);
+  if (!session.ok) return redirect(requireUser(locals) ? '/' : '/login');
   const formData = await request.formData();
   const appId = formData.get('appId')?.toString().trim();
   const allow = formData.get('allow')?.toString() === 'true';

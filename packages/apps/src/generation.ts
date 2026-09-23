@@ -1,5 +1,5 @@
 import { and, asc, eq } from 'drizzle-orm';
-import { appSpecVersions, apps, records, workbooks } from '@planilla/cloudflare/d1/schema';
+import { apps, records, workbooks } from '@planilla/cloudflare/d1/schema';
 import { resolveAiModel, runAiInference, extractAiResponse } from '@planilla/cloudflare/ai';
 import { getObject } from '@planilla/cloudflare/r2';
 import { parseWorkbook, type ParsedColumn, type ParsedSheet, type ParsedWorkbook, type RelationCandidate } from '@planilla/spreadsheets/parsing/parse-workbook';
@@ -7,6 +7,8 @@ import type { AppSpec, EntitySpec, FieldSpec, ViewSpec } from './spec';
 import { parseAppSpec } from './spec';
 import type { AiEnv, Database } from './db';
 import { isSensitiveName, isSpecialName, isRestrictedName } from './classification';
+import { saveSpecVersion } from './records';
+import { assertAiQuota, recordAiUsage, WorkspaceQuotaError } from './usage';
 
 function fieldFromColumn(column: ParsedColumn): FieldSpec {
   const sensitive = isSensitiveName(column.key, column.label);
@@ -204,7 +206,14 @@ function normalizeAiSpec(base: AppSpec, candidate: unknown, allowed: RelationCan
   return parseAppSpec(next) ?? base;
 }
 
-export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bucket, tenantId: string, appId: string) {
+export async function runWorkbookAnalysis(
+  db: Database,
+  env: AiEnv,
+  bucket: R2Bucket,
+  tenantId: string,
+  appId: string,
+  userId?: string,
+) {
   const [app] = await db.select().from(apps).where(and(eq(apps.id, appId), eq(apps.tenantId, tenantId))).limit(1);
   if (!app?.workbookId) throw new Error('App not found.');
   const [workbook] = await db.select().from(workbooks).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, tenantId))).limit(1);
@@ -247,8 +256,9 @@ export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bu
       })),
     };
     try {
+      await assertAiQuota(db, tenantId);
       const model = resolveAiModel(env.WORKERS_AI_MODEL);
-      const response = await runAiInference(env.AI, model, {
+      const input = {
         messages: [
           {
             role: 'system',
@@ -257,32 +267,40 @@ export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bu
           { role: 'user', content: JSON.stringify(prompt) },
         ],
         response_format: { type: 'json_object' },
-      }, env.AI_GATEWAY_ID);
+      };
+      const response = await runAiInference(env.AI, model, input, env.AI_GATEWAY_ID);
+      await recordAiUsage(db, {
+        tenantId,
+        userId: userId ?? workbook.uploadedByUserId,
+        kind: 'analyze',
+        input,
+        output: response,
+      });
       const payload = extractAiResponse(response);
       if (payload) {
         spec = normalizeAiSpec(heuristic, payload, parsed.candidates);
         source = 'ai';
       }
     } catch (error) {
-      console.error(JSON.stringify({
-        event: 'analysis_ai_fallback',
-        tenantId,
-        appId,
-        message: error instanceof Error ? error.message : 'ai_failed',
-      }));
+      if (!(error instanceof WorkspaceQuotaError)) {
+        console.error(JSON.stringify({
+          event: 'analysis_ai_fallback',
+          tenantId,
+          appId,
+          message: error instanceof Error ? error.message : 'ai_failed',
+        }));
+      }
     }
   }
-  const version = app.currentVersion + 1;
-  await db.insert(appSpecVersions).values({
-    id: crypto.randomUUID(),
+  const stored = parseAppSpec(spec);
+  if (!stored) throw new Error('Spec inválida.');
+  await saveSpecVersion(db, {
     tenantId,
     appId,
-    version,
-    spec: spec as unknown as Record<string, unknown>,
+    spec: stored,
     source,
-    createdByUserId: workbook.uploadedByUserId,
+    userId: workbook.uploadedByUserId,
   });
-  await db.update(apps).set({ name: spec.title, currentVersion: version, updatedAt: new Date() }).where(and(eq(apps.id, appId), eq(apps.tenantId, tenantId)));
   await db.update(workbooks).set({ analysisStatus: 'completed', analysisError: null, sheetCount: parsed.sheets.length, updatedAt: new Date() }).where(and(eq(workbooks.id, workbook.id), eq(workbooks.tenantId, tenantId)));
   return spec;
 }

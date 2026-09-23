@@ -6,6 +6,7 @@ import type * as schema from '@planilla/cloudflare/d1/schema';
 import { deleteKv, putKvJson } from '@planilla/cloudflare/kv';
 import type { SessionCacheEntry, SessionUser, UserSession } from '../middleware';
 import { acceptInvitation } from '@planilla/apps/members';
+import { createBillingAccount } from '@planilla/apps/billing';
 
 export const PENDING_INVITE_COOKIE = 'pending_invite';
 export const EMAIL_CHALLENGE_COOKIE = 'email_challenge';
@@ -284,6 +285,7 @@ export async function resolveUserAndTenant(
       slug,
       ownerUserId: userId,
     });
+    await createBillingAccount(db, tenantId);
     await db.insert(memberships).values({
       id: crypto.randomUUID(),
       organizationId: tenantId,

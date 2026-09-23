@@ -1,15 +1,16 @@
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
 import { appSpecVersions } from '@planilla/cloudflare/d1/schema';
-import { requireOwner } from '../../../../../../lib/access';
+import { missingParams, ownerSession } from '../../../../../../lib/access';
 import { fail, json } from '../../../../../../app/http/responses';
 import { saveSpecVersion } from '@planilla/apps/records';
 import { parseAppSpec } from '@planilla/apps/spec';
 
 export const POST: APIRoute = async ({ locals, params }) => {
-  const session = requireOwner(locals);
+  const session = ownerSession(locals);
+  if (!session.ok) return session.response;
   const version = Number(params.version);
-  if (!session || !params.id || !Number.isInteger(version)) return json({ error: 'Unauthorized' }, 401);
+  if (!params.id || !Number.isInteger(version)) return missingParams();
   const [row] = await locals.db.select().from(appSpecVersions).where(and(
     eq(appSpecVersions.tenantId, session.tenantId),
     eq(appSpecVersions.appId, params.id),

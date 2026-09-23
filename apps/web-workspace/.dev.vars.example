@@ -15,8 +15,8 @@ TURNSTILE_SITE_KEY=1x00000000000000000000AA
 # Test secret key for local development:
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 
-# Workers AI model — optional, defaults to @cf/meta/llama-3.1-8b-instruct
-# WORKERS_AI_MODEL=@cf/meta/llama-3.1-8b-instruct
+# Workers AI model — optional, defaults to @cf/meta/llama-3.1-8b-instruct-fast
+# WORKERS_AI_MODEL=@cf/meta/llama-3.1-8b-instruct-fast
 
 # AI Gateway ID — optional, leave empty to call Workers AI directly
 # AI_GATEWAY_ID=your-ai-gateway-id
@@ -35,3 +35,8 @@ ANALYSIS_MODE=inline
 # Optional. Production posts login codes here. Local with ANALYSIS_MODE=inline skips the HTTP call.
 # EMAIL_SEND_URL=https://send.cfemailer.com/send
 # EMAIL_API_KEY=
+
+# Mercado Pago — load when connecting checkout. Leave empty until then.
+# MERCADOPAGO_PUBLIC_KEY=
+# MERCADOPAGO_ACCESS_TOKEN=
+# MERCADOPAGO_WEBHOOK_SECRET=

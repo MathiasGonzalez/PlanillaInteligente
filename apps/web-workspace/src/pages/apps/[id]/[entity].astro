@@ -42,7 +42,7 @@ const cards = page.rows.map((row) => ({
 const statuses = entity.statusFieldKey ? (entity.fields.find((field) => field.key === entity.statusFieldKey)?.options ?? []) : [];
 ---
 <WorkspaceLayout title={`${entity.name} — ${spec.title}`}>
-  <main class="page">
+  <main class="page page--wide">
     <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
     <section class="card toolbar">
       <form method="get">
@@ -97,10 +97,8 @@ const statuses = entity.statusFieldKey ? (entity.fields.find((field) => field.ke
   </main>
 </WorkspaceLayout>
 <style>
-  .page { max-width: 72rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
   .toolbar { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   .toolbar form, .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-  input, select { font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 0.45rem 0.6rem; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 0.45rem; font-size: 0.9rem; }
   .cards { display: none; list-style: none; margin: 0; padding: 0; gap: 0.75rem; }

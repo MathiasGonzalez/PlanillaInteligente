@@ -18,6 +18,19 @@ CREATE TABLE `accounts` (
 CREATE UNIQUE INDEX `accounts_provider_account_idx` ON `accounts` (`provider`,`provider_account_id`);--> statement-breakpoint
 CREATE INDEX `accounts_user_idx` ON `accounts` (`user_id`);--> statement-breakpoint
 CREATE INDEX `accounts_tenant_idx` ON `accounts` (`tenant_id`);--> statement-breakpoint
+CREATE TABLE `ai_usage` (
+	`id` text PRIMARY KEY NOT NULL,
+	`tenant_id` text NOT NULL,
+	`user_id` text NOT NULL,
+	`kind` text NOT NULL,
+	`input_chars` integer NOT NULL,
+	`output_chars` integer NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`tenant_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE INDEX `ai_usage_tenant_created_idx` ON `ai_usage` (`tenant_id`,`created_at`);--> statement-breakpoint
 CREATE TABLE `app_change_proposals` (
 	`id` text PRIMARY KEY NOT NULL,
 	`tenant_id` text NOT NULL,
@@ -73,6 +86,18 @@ CREATE TABLE `apps` (
 --> statement-breakpoint
 CREATE INDEX `apps_tenant_idx` ON `apps` (`tenant_id`);--> statement-breakpoint
 CREATE INDEX `apps_workbook_idx` ON `apps` (`workbook_id`);--> statement-breakpoint
+CREATE TABLE `billing_accounts` (
+	`organization_id` text PRIMARY KEY NOT NULL,
+	`plan` text DEFAULT 'free' NOT NULL,
+	`status` text DEFAULT 'none' NOT NULL,
+	`mp_payer_id` text,
+	`mp_preapproval_id` text,
+	`current_period_end` integer,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `email_login_challenges` (
 	`id` text PRIMARY KEY NOT NULL,
 	`email_hash` text NOT NULL,
@@ -131,6 +156,19 @@ CREATE TABLE `organizations` (
 CREATE UNIQUE INDEX `organizations_slug_idx` ON `organizations` (`slug`);--> statement-breakpoint
 CREATE INDEX `organizations_owner_idx` ON `organizations` (`owner_user_id`);--> statement-breakpoint
 CREATE INDEX `organizations_deactivated_idx` ON `organizations` (`deactivated_at`);--> statement-breakpoint
+CREATE TABLE `payments` (
+	`id` text PRIMARY KEY NOT NULL,
+	`tenant_id` text NOT NULL,
+	`mp_payment_id` text NOT NULL,
+	`status` text NOT NULL,
+	`amount_cents` integer NOT NULL,
+	`currency` text DEFAULT 'UYU' NOT NULL,
+	`created_at` integer NOT NULL,
+	FOREIGN KEY (`tenant_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `payments_mp_payment_id_idx` ON `payments` (`mp_payment_id`);--> statement-breakpoint
+CREATE INDEX `payments_tenant_idx` ON `payments` (`tenant_id`);--> statement-breakpoint
 CREATE TABLE `record_changes` (
 	`id` text PRIMARY KEY NOT NULL,
 	`tenant_id` text NOT NULL,
@@ -205,6 +243,7 @@ CREATE TABLE `workbooks` (
 	`uploaded_by_user_id` text NOT NULL,
 	`original_filename` text NOT NULL,
 	`r2_key` text NOT NULL,
+	`byte_size` integer NOT NULL,
 	`checksum` text,
 	`sheet_count` integer DEFAULT 0 NOT NULL,
 	`analysis_status` text DEFAULT 'pending' NOT NULL,

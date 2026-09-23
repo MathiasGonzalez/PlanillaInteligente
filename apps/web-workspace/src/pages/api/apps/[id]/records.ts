@@ -1,12 +1,14 @@
 import type { APIRoute } from 'astro';
-import { requireUser } from '../../../../lib/access';
+import { missingParams, userSession } from '../../../../lib/access';
 import { fail, json } from '../../../../app/http/responses';
 import { createRecord, listRecords, loadSpec, RecordValidationError, redactRestrictedData, searchRelationOptions } from '@planilla/apps/records';
 import { entityOf } from '@planilla/apps/spec';
+import { WorkspaceQuotaError } from '@planilla/apps/usage';
 
 export const GET: APIRoute = async ({ locals, params, url }) => {
-  const session = requireUser(locals);
-  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const session = userSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id) return missingParams();
   const spec = await loadSpec(locals.db, session.tenantId, params.id);
   const entityKey = url.searchParams.get('entity') ?? '';
   const entity = spec ? entityOf(spec, entityKey) : null;
@@ -36,8 +38,9 @@ export const GET: APIRoute = async ({ locals, params, url }) => {
 };
 
 export const POST: APIRoute = async ({ locals, params, request }) => {
-  const session = requireUser(locals);
-  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const session = userSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id) return missingParams();
   const spec = await loadSpec(locals.db, session.tenantId, params.id);
   const body = await request.json().catch(() => null) as { entityKey?: string; data?: Record<string, unknown> } | null;
   const entity = spec && body?.entityKey ? entityOf(spec, body.entityKey) : null;
@@ -53,6 +56,7 @@ export const POST: APIRoute = async ({ locals, params, request }) => {
     return json({ id }, 201);
   } catch (error) {
     if (error instanceof RecordValidationError) return json({ error: error.message }, 400);
+    if (error instanceof WorkspaceQuotaError) return json({ error: error.message }, 403);
     return fail(500);
   }
 };

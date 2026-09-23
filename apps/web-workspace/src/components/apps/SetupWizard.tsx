@@ -121,7 +121,7 @@ export default function SetupWizard({ appId }: Props): JSX.Element {
       </fieldset>
       {error ? <p className="alert">{error}</p> : null}
       <button className="cta" type="button" disabled={pending} onClick={() => void save(false)}>Seguir</button>
-      <style>{`.wizard{display:grid;gap:0.75rem}label{display:grid;gap:0.3rem;font-family:var(--sans)}input,select,textarea{font:inherit;border:1px solid var(--line);border-radius:10px;padding:0.5rem}`}</style>
+      <style>{`.wizard{display:grid;gap:0.75rem}label{display:grid;gap:0.3rem;font-family:var(--sans)}`}</style>
     </div>
   );
 }

@@ -139,19 +139,6 @@ export function UploadForm(): JSX.Element {
           border-radius: 14px;
           background: white;
         }
-        .upload-track {
-          height: 4px;
-          border-radius: 999px;
-          background: var(--line);
-          overflow: hidden;
-        }
-        .upload-track span {
-          display: block;
-          height: 100%;
-          width: 38%;
-          border-radius: inherit;
-          background: var(--accent);
-        }
         .upload-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
         .upload-steps li {
           display: flex;
@@ -180,12 +167,7 @@ export function UploadForm(): JSX.Element {
           color: var(--muted);
         }
         @media (prefers-reduced-motion: no-preference) {
-          .upload-track span { animation: upload-slide 1.15s ease-in-out infinite; }
           .upload-steps li.active .step-dot { animation: step-pulse 1.2s ease-out infinite; }
-        }
-        @keyframes upload-slide {
-          0% { transform: translateX(-130%); }
-          100% { transform: translateX(340%); }
         }
         @keyframes step-pulse {
           0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }

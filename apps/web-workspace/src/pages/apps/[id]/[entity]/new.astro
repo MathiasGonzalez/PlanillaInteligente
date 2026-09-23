@@ -14,7 +14,7 @@ const entity = spec ? entityOf(spec, entityKey) : null;
 if (!spec || !entity) return new Response('Not found', { status: 404 });
 ---
 <WorkspaceLayout title={`Nuevo — ${entity.name}`}>
-  <main class="page">
+  <main class="page page--narrow">
     <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
     <p><a href={`/apps/${appId}/${entity.key}`}>← Volver a la lista</a></p>
     <section class="card">
@@ -23,6 +23,4 @@ if (!spec || !entity) return new Response('Not found', { status: 404 });
     </section>
   </main>
 </WorkspaceLayout>
-<style>
-  .page { max-width: 40rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
-</style>
+

@@ -6,6 +6,7 @@ import { createDatabase } from '@planilla/cloudflare/d1';
 import { getKvJson, putKvJson } from '@planilla/cloudflare/kv';
 import { cloudflareEnv } from '@planilla/cloudflare/env';
 import { deleteSessionByToken } from '@planilla/apps/retention';
+import { json } from './app/http/responses';
 
 export interface SessionUser {
   id: string;
@@ -82,6 +83,16 @@ async function loadSessionProfile(
   } satisfies SessionUser;
 }
 
+function unauthenticated(context: APIContext) {
+  if (isPublicRoute(context.url.pathname)) {
+    return null;
+  }
+  if (context.url.pathname.startsWith('/api/')) {
+    return json({ error: 'Unauthorized' }, 401);
+  }
+  return context.redirect('/login');
+}
+
 function isWriteAllowedWhileDeactivated(pathname: string) {
   return pathname === '/api/account' || pathname === '/api/auth/signout';
 }
@@ -106,10 +117,7 @@ function rejectDeactivatedWrite(context: APIContext) {
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return null;
   if (isWriteAllowedWhileDeactivated(url.pathname)) return null;
   if (url.pathname.startsWith('/api/')) {
-    return new Response(JSON.stringify({ error: 'Workspace dado de baja.' }), {
-      status: 403,
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-    });
+    return json({ error: 'Workspace dado de baja.' }, 403);
   }
   return context.redirect('/');
 }
@@ -121,7 +129,7 @@ function clearKnownSessionCookies(cookies: AstroCookies) {
 }
 
 export const onRequest = defineMiddleware(async (context, next) => {
-  const { locals, cookies, url } = context;
+  const { locals, cookies } = context;
   const db = createDatabase(cloudflareEnv.DB);
 
   locals.db = db;
@@ -133,11 +141,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const sessionToken = getSessionToken(cookies);
 
   if (!sessionToken) {
-    if (isPublicRoute(url.pathname)) {
-      return next();
-    }
-
-    return context.redirect('/login');
+    return unauthenticated(context) ?? next();
   }
 
   const cacheKey = `session:${sessionToken}`;
@@ -146,12 +150,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (cachedSession && new Date(cachedSession.expiresAt) <= new Date()) {
     await deleteSessionByToken(db, cloudflareEnv.SESSION_KV, sessionToken);
     clearKnownSessionCookies(cookies);
-
-    if (isPublicRoute(url.pathname)) {
-      return next();
-    }
-
-    return context.redirect('/login');
+    return unauthenticated(context) ?? next();
   }
 
   if (cachedSession) {
@@ -199,12 +198,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (!record) {
     await deleteSessionByToken(db, cloudflareEnv.SESSION_KV, sessionToken);
     clearKnownSessionCookies(cookies);
-
-    if (isPublicRoute(url.pathname)) {
-      return next();
-    }
-
-    return context.redirect('/login');
+    return unauthenticated(context) ?? next();
   }
 
   locals.user = {

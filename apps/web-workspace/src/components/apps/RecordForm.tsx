@@ -115,7 +115,7 @@ export default function RecordForm({ appId, entityKey, recordId, fields, initial
       ))}
       {error ? <p className="alert">{error}</p> : null}
       <button className="cta" type="submit" disabled={pending}>{pending ? 'Guardando…' : 'Guardar'}</button>
-      <style>{`.record-form{display:grid;gap:0.75rem}label{display:grid;gap:0.3rem;font-family:var(--sans);font-size:0.9rem}input,textarea,select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:0.55rem 0.7rem}`}</style>
+      <style>{`.record-form{display:grid;gap:0.75rem}label{display:grid;gap:0.3rem;font-family:var(--sans);font-size:0.9rem}`}</style>
     </form>
   );
 }

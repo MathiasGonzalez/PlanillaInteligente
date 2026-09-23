@@ -1,5 +1,7 @@
 # Definición del producto
- 
+
+Visión y posicionamiento. No describe el MVP actual: eso está en `MVP_STATUS.md` y `FLUJOS.md`.
+
 Una plataforma AI-native que transforma planillas Excel utilizadas por pequeñas empresas y profesionales en aplicaciones web estructuradas, multiusuario y listas para operar.
  
 El usuario sube un archivo `.xlsx` que ya utiliza en su negocio. La plataforma analiza automáticamente su estructura, identifica entidades, relaciones, campos, reglas implícitas y posibles procesos de negocio, y genera una aplicación web adaptada a esa información.

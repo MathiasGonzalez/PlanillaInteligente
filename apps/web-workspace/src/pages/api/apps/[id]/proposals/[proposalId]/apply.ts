@@ -1,13 +1,14 @@
 import type { APIRoute } from 'astro';
 import { cloudflareEnv } from '@planilla/cloudflare/env';
-import { requireOwner } from '../../../../../../lib/access';
+import { missingParams, ownerSession } from '../../../../../../lib/access';
 import { fail, json } from '../../../../../../app/http/responses';
 import { applyProposal } from '@planilla/apps/evolution';
 import { scheduleAppJob } from '@planilla/apps/jobs';
 
 export const POST: APIRoute = async ({ locals, params }) => {
-  const session = requireOwner(locals);
-  if (!session || !params.id || !params.proposalId) return json({ error: 'Unauthorized' }, 401);
+  const session = ownerSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id || !params.proposalId) return missingParams();
   try {
     const result = await applyProposal(locals.db, {
       tenantId: session.tenantId,
@@ -16,7 +17,7 @@ export const POST: APIRoute = async ({ locals, params }) => {
       userId: session.user.id,
     });
     if (result.queued) {
-      await scheduleAppJob(locals.db, { ...cloudflareEnv, ANALYSIS_MODE: 'queue' }, {
+      await scheduleAppJob(locals.db, cloudflareEnv, {
         kind: 'apply-proposal',
         tenantId: session.tenantId,
         appId: params.id,

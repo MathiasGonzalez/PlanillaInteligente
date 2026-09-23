@@ -1,13 +1,14 @@
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
 import { apps } from '@planilla/cloudflare/d1/schema';
-import { requireOwner } from '../../../../lib/access';
+import { missingParams, ownerSession } from '../../../../lib/access';
 import { fail, json } from '../../../../app/http/responses';
 import { loadSpec, resolveRelations } from '@planilla/apps/records';
 
 export const POST: APIRoute = async ({ locals, params }) => {
-  const session = requireOwner(locals);
-  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const session = ownerSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id) return missingParams();
   const spec = await loadSpec(locals.db, session.tenantId, params.id);
   if (!spec) return json({ error: 'Not found' }, 404);
   try {

@@ -2,13 +2,15 @@ import type { APIRoute } from 'astro';
 import { and, desc, eq } from 'drizzle-orm';
 import { appChangeProposals, workbooks, apps } from '@planilla/cloudflare/d1/schema';
 import { cloudflareEnv } from '@planilla/cloudflare/env';
-import { requireOwner } from '../../../../lib/access';
+import { missingParams, ownerSession } from '../../../../lib/access';
 import { fail, json } from '../../../../app/http/responses';
 import { createProposal } from '@planilla/apps/evolution';
+import { WorkspaceQuotaError } from '@planilla/apps/usage';
 
 export const GET: APIRoute = async ({ locals, params }) => {
-  const session = requireOwner(locals);
-  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const session = ownerSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id) return missingParams();
   const rows = await locals.db.select().from(appChangeProposals).where(and(
     eq(appChangeProposals.tenantId, session.tenantId),
     eq(appChangeProposals.appId, params.id),
@@ -17,8 +19,9 @@ export const GET: APIRoute = async ({ locals, params }) => {
 };
 
 export const POST: APIRoute = async ({ locals, params, request }) => {
-  const session = requireOwner(locals);
-  if (!session || !params.id) return json({ error: 'Unauthorized' }, 401);
+  const session = ownerSession(locals);
+  if (!session.ok) return session.response;
+  if (!params.id) return missingParams();
   const body = await request.json().catch(() => null) as { instruction?: string } | null;
   const instruction = body?.instruction?.trim();
   if (!instruction) return json({ error: 'Falta la instrucción.' }, 400);
@@ -35,7 +38,8 @@ export const POST: APIRoute = async ({ locals, params, request }) => {
       allowSamples: workbook?.sampleConsentAt != null,
     });
     return json(result, result.status === 'rejected' ? 422 : 201);
-  } catch {
+  } catch (error) {
+    if (error instanceof WorkspaceQuotaError) return json({ error: error.message }, 403);
     return fail(500);
   }
 };

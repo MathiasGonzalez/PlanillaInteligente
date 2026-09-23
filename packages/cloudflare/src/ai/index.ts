@@ -1,4 +1,4 @@
-export const DEFAULT_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+export const DEFAULT_AI_MODEL = '@cf/meta/llama-3.1-8b-instruct-fast';
 
 type AiBinding = {
   run(model: string, input: unknown, options?: unknown): Promise<unknown>;

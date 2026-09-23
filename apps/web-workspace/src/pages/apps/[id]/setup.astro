@@ -8,9 +8,11 @@ const user = Astro.locals.user;
 const tenantId = Astro.locals.tenantId;
 const appId = Astro.params.id;
 if (!user || !tenantId || !appId) return Astro.redirect('/login');
-if (user.role !== 'owner') return Astro.redirect(`/apps/${appId}`);
 const [app] = await Astro.locals.db.select().from(apps).where(and(eq(apps.id, appId), eq(apps.tenantId, tenantId))).limit(1);
 if (!app) return new Response('Not found', { status: 404 });
+if (user.role !== 'owner') {
+  return Astro.redirect(app.status === 'published' && app.currentVersion >= 1 ? `/apps/${appId}` : '/');
+}
 const [workbook] = app.workbookId
   ? await Astro.locals.db.select().from(workbooks).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, tenantId))).limit(1)
   : [];
@@ -24,7 +26,7 @@ const [specVersion] = app.currentVersion > 0
 const fromModel = specVersion?.source === 'ai';
 ---
 <WorkspaceLayout title="Revisar app — PlanillaInteligente">
-  <main class="page">
+  <main class="page page--narrow">
     <p><a href="/">← Mis apps</a></p>
     <section class="card">
       <h1>Revisá la app</h1>
@@ -58,22 +60,8 @@ const fromModel = specVersion?.source === 'ai';
   </main>
 </WorkspaceLayout>
 <style>
-  .page { max-width: 40rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
   .analysis { display: grid; gap: 0.7rem; margin-top: 1rem; }
   .analysis p { margin: 0; font-family: var(--sans); }
-  .upload-track {
-    height: 4px;
-    border-radius: 999px;
-    background: var(--line);
-    overflow: hidden;
-  }
-  .upload-track span {
-    display: block;
-    height: 100%;
-    width: 38%;
-    border-radius: inherit;
-    background: var(--accent);
-  }
   .origin {
     display: inline-flex;
     width: fit-content;
@@ -87,12 +75,7 @@ const fromModel = specVersion?.source === 'ai';
   .origin-ai { background: var(--accent-soft); color: var(--accent); }
   .origin-local { background: var(--line); color: var(--muted); }
   @media (prefers-reduced-motion: no-preference) {
-    .upload-track span { animation: upload-slide 1.15s ease-in-out infinite; }
     .origin { animation: origin-in 0.45s ease; }
-  }
-  @keyframes upload-slide {
-    0% { transform: translateX(-130%); }
-    100% { transform: translateX(340%); }
   }
   @keyframes origin-in {
     from { opacity: 0; transform: translateY(4px); }

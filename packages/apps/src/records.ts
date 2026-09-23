@@ -1,17 +1,71 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { appSpecVersions, apps, recordChanges, records } from '@planilla/cloudflare/d1/schema';
 import type { ParsedSheet } from '@planilla/spreadsheets/parsing/parse-workbook';
-import type { AppSpec, EntitySpec, FieldSpec } from './spec';
+import type { AppSpec, EntitySpec, FieldSpec, FieldType } from './spec';
 import { entityOf, parseAppSpec } from './spec';
 import { restrictedFieldKeys } from './classification';
 import type { Database } from './db';
+import { assertRecordQuota } from './usage';
 
 export { redactRestrictedData } from './classification';
+
+const D1_INSERT_CHUNK = 9;
 
 export class RecordValidationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RecordValidationError';
+  }
+}
+
+export type CoerceResult = { ok: true; value: unknown } | { ok: false; value: unknown };
+
+export function coerceFieldValue(type: FieldType, value: unknown): CoerceResult {
+  if (value === undefined || value === null || value === '') return { ok: true, value: null };
+  if (type === 'number' || type === 'amount') {
+    const number = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
+    return Number.isFinite(number) ? { ok: true, value: number } : { ok: false, value };
+  }
+  if (type === 'boolean') return { ok: true, value: value === true || value === 'true' || value === '1' || value === 'sí' };
+  if (type === 'date') {
+    const text = String(value);
+    return /^\d{4}-\d{2}-\d{2}/.test(text) ? { ok: true, value: text.slice(0, 10) } : { ok: false, value };
+  }
+  const text = String(value).trim();
+  if (type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
+    return { ok: false, value };
+  }
+  return { ok: true, value: text };
+}
+
+export interface RecordChangeInput {
+  tenantId: string;
+  appId: string;
+  recordId: string;
+  entityKey: string;
+  userId: string | null;
+  op: 'create' | 'update' | 'delete';
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  proposalId?: string | null;
+}
+
+export async function insertRecordChanges(db: Database, entries: RecordChangeInput[]) {
+  const rows = entries.map((params) => ({
+    id: crypto.randomUUID(),
+    tenantId: params.tenantId,
+    appId: params.appId,
+    recordId: params.recordId,
+    entityKey: params.entityKey,
+    userId: params.userId,
+    op: params.op,
+    before: params.before,
+    after: params.after,
+    proposalId: params.proposalId ?? null,
+  }));
+  for (let index = 0; index < rows.length; index += D1_INSERT_CHUNK) {
+    const chunk = rows.slice(index, index + D1_INSERT_CHUNK);
+    if (chunk.length > 0) await db.insert(recordChanges).values(chunk);
   }
 }
 
@@ -71,34 +125,11 @@ export async function insertImportedRecords(
     updatedByUserId: params.userId,
   })));
   // Each row binds 10 parameters. D1 rejects statements with more than 100.
-  for (let index = 0; index < rows.length; index += 9) {
-    const chunk = rows.slice(index, index + 9);
+  for (let index = 0; index < rows.length; index += D1_INSERT_CHUNK) {
+    const chunk = rows.slice(index, index + D1_INSERT_CHUNK);
     if (chunk.length > 0) await db.insert(records).values(chunk);
   }
   return rows.length;
-}
-
-function coerce(field: FieldSpec, value: unknown): unknown {
-  if (value === undefined || value === null || value === '') return null;
-  if (field.type === 'number' || field.type === 'amount') {
-    const number = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
-    if (!Number.isFinite(number)) throw new RecordValidationError(`«${field.label}» tiene que ser un número.`);
-    return number;
-  }
-  if (field.type === 'boolean') return value === true || value === 'true' || value === '1' || value === 'sí';
-  if (field.type === 'date') {
-    const text = String(value);
-    if (!/^\d{4}-\d{2}-\d{2}/.test(text)) throw new RecordValidationError(`«${field.label}» tiene que ser una fecha.`);
-    return text.slice(0, 10);
-  }
-  const text = String(value).trim();
-  if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) {
-    throw new RecordValidationError(`«${field.label}» no es un email.`);
-  }
-  if ((field.type === 'status' || field.type === 'category') && field.options && field.options.length > 0 && !field.options.includes(text)) {
-    throw new RecordValidationError(`«${field.label}» no está entre las opciones.`);
-  }
-  return text;
 }
 
 export function validateRecordInput(entity: EntitySpec, input: Record<string, unknown>, mode: 'create' | 'update') {
@@ -111,7 +142,17 @@ export function validateRecordInput(entity: EntitySpec, input: Record<string, un
       }
       continue;
     }
-    const value = coerce(field, input[field.key]);
+    const coerced = coerceFieldValue(field.type, input[field.key]);
+    if (!coerced.ok) {
+      if (field.type === 'number' || field.type === 'amount') throw new RecordValidationError(`«${field.label}» tiene que ser un número.`);
+      if (field.type === 'date') throw new RecordValidationError(`«${field.label}» tiene que ser una fecha.`);
+      if (field.type === 'email') throw new RecordValidationError(`«${field.label}» no es un email.`);
+      throw new RecordValidationError(`«${field.label}» no es válido.`);
+    }
+    const value = coerced.value;
+    if ((field.type === 'status' || field.type === 'category') && field.options && field.options.length > 0 && value !== null && value !== '' && !field.options.includes(String(value))) {
+      throw new RecordValidationError(`«${field.label}» no está entre las opciones.`);
+    }
     if (mode === 'create' && field.required && field.visible && (value === null || value === '')) {
       throw new RecordValidationError(`Falta «${field.label}».`);
     }
@@ -120,39 +161,12 @@ export function validateRecordInput(entity: EntitySpec, input: Record<string, un
   return data;
 }
 
-async function writeChange(
-  db: Database,
-  params: {
-    tenantId: string;
-    appId: string;
-    recordId: string;
-    entityKey: string;
-    userId: string | null;
-    op: 'create' | 'update' | 'delete';
-    before: Record<string, unknown> | null;
-    after: Record<string, unknown> | null;
-    proposalId?: string | null;
-  },
-) {
-  await db.insert(recordChanges).values({
-    id: crypto.randomUUID(),
-    tenantId: params.tenantId,
-    appId: params.appId,
-    recordId: params.recordId,
-    entityKey: params.entityKey,
-    userId: params.userId,
-    op: params.op,
-    before: params.before,
-    after: params.after,
-    proposalId: params.proposalId ?? null,
-  });
-}
-
 export async function createRecord(
   db: Database,
   params: { tenantId: string; appId: string; entity: EntitySpec; userId: string; input: Record<string, unknown> },
 ) {
   const data = validateRecordInput(params.entity, params.input, 'create');
+  await assertRecordQuota(db, params.tenantId, 1);
   const id = crypto.randomUUID();
   await db.insert(records).values({
     id,
@@ -164,7 +178,7 @@ export async function createRecord(
     createdByUserId: params.userId,
     updatedByUserId: params.userId,
   });
-  await writeChange(db, {
+  await insertRecordChanges(db, [{
     tenantId: params.tenantId,
     appId: params.appId,
     recordId: id,
@@ -173,7 +187,7 @@ export async function createRecord(
     op: 'create',
     before: null,
     after: data,
-  });
+  }]);
   return id;
 }
 
@@ -191,7 +205,7 @@ export async function updateRecord(
   const patch = validateRecordInput(params.entity, params.input, 'update');
   const data = { ...current.data, ...patch };
   await db.update(records).set({ data, updatedByUserId: params.userId, updatedAt: new Date() }).where(and(eq(records.id, current.id), eq(records.tenantId, params.tenantId)));
-  await writeChange(db, {
+  await insertRecordChanges(db, [{
     tenantId: params.tenantId,
     appId: params.appId,
     recordId: current.id,
@@ -201,7 +215,7 @@ export async function updateRecord(
     before: current.data,
     after: data,
     proposalId: params.proposalId,
-  });
+  }]);
   return data;
 }
 
@@ -213,7 +227,7 @@ export async function deleteRecord(db: Database, params: { tenantId: string; app
     eq(records.entityKey, params.entityKey),
   )).limit(1);
   if (!current) return false;
-  await writeChange(db, {
+  await insertRecordChanges(db, [{
     tenantId: params.tenantId,
     appId: params.appId,
     recordId: current.id,
@@ -222,7 +236,7 @@ export async function deleteRecord(db: Database, params: { tenantId: string; app
     op: 'delete',
     before: current.data,
     after: null,
-  });
+  }]);
   await db.delete(records).where(and(eq(records.id, current.id), eq(records.tenantId, params.tenantId)));
   return true;
 }

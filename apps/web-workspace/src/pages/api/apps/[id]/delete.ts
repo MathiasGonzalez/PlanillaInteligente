@@ -1,13 +1,17 @@
 import type { APIRoute } from 'astro';
 import { cloudflareEnv } from '@planilla/cloudflare/env';
-import { requireOwner } from '../../../../lib/access';
+import { missingParams, ownerSession, requireUser } from '../../../../lib/access';
 import { fail, json } from '../../../../app/http/responses';
 import { deleteApp } from '@planilla/apps/retention';
 
 export const POST: APIRoute = async ({ locals, params, redirect, request }) => {
-  const session = requireOwner(locals);
-  if (!session || !params.id) return redirect('/login');
   const wantsJson = request.headers.get('accept')?.includes('application/json');
+  const session = ownerSession(locals);
+  if (!session.ok) {
+    if (wantsJson) return session.response;
+    return redirect(requireUser(locals) ? '/' : '/login');
+  }
+  if (!params.id) return missingParams();
   try {
     const deleted = await deleteApp(locals.db, cloudflareEnv.BUCKET, session.tenantId, params.id);
     if (wantsJson) return json({ deleted });
