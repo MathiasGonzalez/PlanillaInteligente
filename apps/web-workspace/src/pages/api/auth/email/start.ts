@@ -36,7 +36,7 @@ export const POST: APIRoute = async ({ request, locals, cookies, clientAddress, 
   if (recent.length >= 5 || Date.now() - latest < 60_000) return json(GENERIC);
   const id = randomId();
   const code = randomOtp();
-  const sent = await sendLoginCode(cloudflareEnv.MAILER, { to: email, code, expiresInMinutes: 10 });
+  const sent = await sendLoginCode(cloudflareEnv, { to: email, code, expiresInMinutes: 10 });
   if (!sent) return json({ error: UNAVAILABLE }, 503);
   await locals.db.insert(emailLoginChallenges).values({
     id,

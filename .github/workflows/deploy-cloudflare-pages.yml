@@ -76,28 +76,6 @@ jobs:
         run: |
           npx wrangler deploy --config workers/api-maintenance/wrangler.jsonc
 
-      - name: Deploy mailer Worker (optional)
-        id: mailer
-        continue-on-error: true
-        run: |
-          FROM="$(jq -r '.emailFromAddress // empty' "$RUNNER_TEMP/stack.json")"
-          if [ -z "$FROM" ]; then
-            echo "deployed=false" >> "$GITHUB_OUTPUT"
-            echo "Email sending is not configured. Skipping mailer."
-            exit 0
-          fi
-          if npx wrangler deploy --config workers/api-mailer/wrangler.jsonc; then
-            echo "deployed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "deployed=false" >> "$GITHUB_OUTPUT"
-            echo "Mailer deploy failed. Email login will show an error. Continuing."
-            exit 1
-          fi
-
-      - name: Attach mailer binding when the worker exists
-        if: steps.mailer.outputs.deployed == 'true'
-        run: node infra/apply-bindings.mjs "$RUNNER_TEMP/stack.json" --with-mailer
-
       - name: Deploy workspace to Cloudflare Pages (production)
         working-directory: apps/web-workspace
         run: |
@@ -180,28 +158,6 @@ jobs:
       - name: Deploy maintenance Worker (preview)
         run: |
           npx wrangler deploy --config workers/api-maintenance/wrangler.jsonc --env preview
-
-      - name: Deploy mailer Worker (optional)
-        id: mailer
-        continue-on-error: true
-        run: |
-          FROM="$(jq -r '.emailFromAddress // empty' "$RUNNER_TEMP/stack.json")"
-          if [ -z "$FROM" ]; then
-            echo "deployed=false" >> "$GITHUB_OUTPUT"
-            echo "Email sending is not configured. Skipping mailer."
-            exit 0
-          fi
-          if npx wrangler deploy --config workers/api-mailer/wrangler.jsonc --env preview; then
-            echo "deployed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "deployed=false" >> "$GITHUB_OUTPUT"
-            echo "Mailer deploy failed. Email login will show an error. Continuing."
-            exit 1
-          fi
-
-      - name: Attach mailer binding when the worker exists
-        if: steps.mailer.outputs.deployed == 'true'
-        run: node infra/apply-bindings.mjs "$RUNNER_TEMP/stack.json" --with-mailer
 
       - name: Deploy workspace to Cloudflare Pages (development)
         working-directory: apps/web-workspace

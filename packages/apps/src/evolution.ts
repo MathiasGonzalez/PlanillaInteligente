@@ -1,10 +1,11 @@
 import { and, eq } from 'drizzle-orm';
 import { appChangeProposals, recordChanges, records } from '@planilla/cloudflare/d1/schema';
-import { resolveAiModel, runAiInference } from '@planilla/cloudflare/ai';
+import { resolveAiModel, runAiInference, extractAiResponse } from '@planilla/cloudflare/ai';
 import type { AppSpec, DashboardWidget, EntitySpec, FieldSpec, FieldType, ViewSpec } from './spec';
-import { diffSpecs, entityOf, parseAppSpec } from './spec';
+import { diffSpecs, entityOf, FIELD_TYPES, parseAppSpec } from './spec';
 import { loadApp, loadSpec, saveSpecVersion } from './records';
 import type { AiEnv, Database } from './db';
+import { isSensitiveName, isSpecialName, previewSample } from './classification';
 
 export const DATA_ROW_QUEUE_THRESHOLD = 2000;
 
@@ -28,7 +29,7 @@ export type AppOperation =
   | { op: 'fillDefault'; entityKey: string; fieldKey: string; value: string }
   | { op: 'extractEntity'; sourceEntity: string; entity: EntitySpec; fieldKeys: string[]; relationFieldKey: string };
 
-const FIELD_TYPES = new Set(['text', 'long-text', 'number', 'amount', 'date', 'boolean', 'email', 'phone', 'url', 'status', 'category', 'identifier', 'relation', 'computed']);
+const FIELD_TYPE_SET = new Set<string>(FIELD_TYPES);
 const KEY = /^[a-z][a-z0-9_]{0,63}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,16 +38,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asField(value: unknown): FieldSpec | null {
   if (!isRecord(value) || typeof value.key !== 'string' || !KEY.test(value.key) || typeof value.label !== 'string') return null;
-  if (typeof value.type !== 'string' || !FIELD_TYPES.has(value.type)) return null;
+  if (typeof value.type !== 'string' || !FIELD_TYPE_SET.has(value.type)) return null;
+  const sensitive = value.sensitive === true || isSensitiveName(value.key, value.label);
+  const specialCategory = value.specialCategory === true || isSpecialName(value.key, value.label);
   return {
     key: value.key,
     label: value.label.slice(0, 120),
     type: value.type as FieldType,
     required: value.required === true,
-    visible: value.visible !== false,
-    editable: value.editable !== false,
-    sensitive: false,
-    specialCategory: false,
+    visible: sensitive || specialCategory ? false : value.visible !== false,
+    editable: sensitive || specialCategory || value.type === 'computed' ? false : value.editable !== false,
+    sensitive,
+    specialCategory,
     options: Array.isArray(value.options) ? value.options.filter((item): item is string => typeof item === 'string').slice(0, 40) : undefined,
     currency: typeof value.currency === 'string' ? value.currency : null,
     relation: null,
@@ -67,7 +70,7 @@ export function parseOperations(value: unknown): AppOperation[] | null {
     } else if (op === 'renameField' && typeof item.entityKey === 'string' && typeof item.fieldKey === 'string' && typeof item.label === 'string') {
       operations.push({ op, entityKey: item.entityKey, fieldKey: item.fieldKey, label: item.label.slice(0, 120) });
     } else if (op === 'updateField' && typeof item.entityKey === 'string' && typeof item.fieldKey === 'string' && isRecord(item.patch)) {
-      const type = typeof item.patch.type === 'string' && FIELD_TYPES.has(item.patch.type) ? item.patch.type as FieldType : undefined;
+      const type = typeof item.patch.type === 'string' && FIELD_TYPE_SET.has(item.patch.type) ? item.patch.type as FieldType : undefined;
       operations.push({
         op,
         entityKey: item.entityKey,
@@ -100,7 +103,7 @@ export function parseOperations(value: unknown): AppOperation[] | null {
       operations.push({ op, viewKey: item.viewKey });
     } else if (op === 'removeWidget' && typeof item.dashboardKey === 'string' && typeof item.widgetKey === 'string') {
       operations.push({ op, dashboardKey: item.dashboardKey, widgetKey: item.widgetKey });
-    } else if (op === 'convertFieldType' && typeof item.entityKey === 'string' && typeof item.fieldKey === 'string' && typeof item.type === 'string' && FIELD_TYPES.has(item.type)) {
+    } else if (op === 'convertFieldType' && typeof item.entityKey === 'string' && typeof item.fieldKey === 'string' && typeof item.type === 'string' && FIELD_TYPE_SET.has(item.type)) {
       operations.push({ op, entityKey: item.entityKey, fieldKey: item.fieldKey, type: item.type as FieldType });
     } else if (op === 'fillDefault' && typeof item.entityKey === 'string' && typeof item.fieldKey === 'string' && typeof item.value === 'string') {
       operations.push({ op, entityKey: item.entityKey, fieldKey: item.fieldKey, value: item.value.slice(0, 200) });
@@ -189,6 +192,10 @@ export function applySpecOperations(spec: AppSpec, operations: AppOperation[]): 
       const field = entityOf(next, operation.entityKey)?.fields.find((item) => item.key === operation.fieldKey);
       if (!field) throw new Error('Campo inexistente.');
       Object.assign(field, Object.fromEntries(Object.entries(operation.patch).filter(([, value]) => value !== undefined)));
+      if (field.sensitive || field.specialCategory) {
+        field.visible = false;
+        field.editable = false;
+      }
     } else if (operation.op === 'archiveField') {
       const field = entityOf(next, operation.entityKey)?.fields.find((item) => item.key === operation.fieldKey);
       if (!field) throw new Error('Campo inexistente.');
@@ -259,11 +266,53 @@ export function applySpecOperations(spec: AppSpec, operations: AppOperation[]): 
       const field = entityOf(next, operation.entityKey)?.fields.find((item) => item.key === operation.fieldKey);
       if (!field) throw new Error('Campo inexistente.');
       field.type = operation.type;
+    } else if (operation.op === 'computeField') {
+      const entity = entityOf(next, operation.entityKey);
+      if (!entity) throw new Error('Lista inexistente.');
+      if (!entity.fields.some((field) => field.key === operation.fieldKey)) {
+        entity.fields.push({
+          key: operation.fieldKey,
+          label: operation.fieldKey,
+          type: 'computed',
+          required: false,
+          visible: true,
+          editable: false,
+          sensitive: false,
+          specialCategory: false,
+        });
+      }
     }
   }
   const parsed = parseAppSpec(next);
   if (!parsed) throw new Error('La spec resultante no es válida.');
   return parsed;
+}
+
+function proposalScope(params: { tenantId: string; appId: string; proposalId: string }) {
+  return and(
+    eq(appChangeProposals.id, params.proposalId),
+    eq(appChangeProposals.tenantId, params.tenantId),
+    eq(appChangeProposals.appId, params.appId),
+  );
+}
+
+export async function markProposalFailed(db: Database, tenantId: string, appId: string, proposalId: string, message: string) {
+  await db.update(appChangeProposals).set({
+    status: 'failed',
+    errorMessage: message.slice(0, 300),
+    updatedAt: new Date(),
+  }).where(proposalScope({ tenantId, appId, proposalId }));
+}
+
+async function claimPendingProposal(db: Database, params: { tenantId: string; appId: string; proposalId: string }) {
+  const claimed = await db.update(appChangeProposals).set({
+    status: 'processing',
+    updatedAt: new Date(),
+  }).where(and(
+    proposalScope(params),
+    eq(appChangeProposals.status, 'pending'),
+  )).returning({ id: appChangeProposals.id });
+  return claimed.length > 0;
 }
 
 type Token = { type: 'num'; value: number } | { type: 'id'; value: string } | { type: 'op'; value: string } | { type: 'lp' } | { type: 'rp' } | { type: 'comma' };
@@ -394,7 +443,12 @@ export async function dryRun(db: Database, tenantId: string, appId: string, spec
       if (failed > 0) failures.push(`${failed} filas de ${entityKey}.${operation.fieldKey} no convierten a ${operation.type}.`);
     }
     if (allowSamples && examples.length < 3 && rows[0]) {
-      examples.push({ entityKey, before: JSON.stringify(rows[0].data).slice(0, 180), after: operation.op });
+      const entity = entityOf(spec, entityKey);
+      examples.push({
+        entityKey,
+        before: entity ? previewSample(entity.fields, rows[0].data) : '{}',
+        after: operation.op,
+      });
     }
   }
   return { diff: diffSpecs(spec, next), affected, examples, failures, spec: next };
@@ -482,14 +536,6 @@ async function applyData(db: Database, tenantId: string, appId: string, userId: 
   }
 }
 
-function extractAi(response: unknown): unknown {
-  if (typeof response === 'string') {
-    try { return JSON.parse(response) as unknown; } catch { return null; }
-  }
-  if (isRecord(response) && 'response' in response) return extractAi(response.response);
-  return response;
-}
-
 export async function createProposal(db: Database, env: AiEnv, params: { tenantId: string; appId: string; userId: string; instruction: string; allowSamples: boolean }) {
   const spec = await loadSpec(db, params.tenantId, params.appId);
   const app = await loadApp(db, params.tenantId, params.appId);
@@ -509,7 +555,7 @@ export async function createProposal(db: Database, env: AiEnv, params: { tenantI
       ],
       response_format: { type: 'json_object' },
     }, env.AI_GATEWAY_ID);
-    const payload = extractAi(response);
+    const payload = extractAiResponse(response);
     if (isRecord(payload) && payload.supported === false) {
       explanation = typeof payload.explanation === 'string' ? payload.explanation.slice(0, 500) : 'No se puede hacer con las operaciones disponibles.';
     } else if (isRecord(payload)) {
@@ -568,21 +614,24 @@ export async function createProposal(db: Database, env: AiEnv, params: { tenantI
 }
 
 export async function applyProposal(db: Database, params: { tenantId: string; appId: string; proposalId: string; userId: string }) {
-  const [proposal] = await db.select().from(appChangeProposals).where(and(
-    eq(appChangeProposals.id, params.proposalId),
-    eq(appChangeProposals.tenantId, params.tenantId),
-    eq(appChangeProposals.appId, params.appId),
-  )).limit(1);
-  if (!proposal || proposal.status === 'applied' || proposal.status === 'rejected') return { status: 'failed' as const, queued: false };
+  const scope = proposalScope(params);
+  const [proposal] = await db.select().from(appChangeProposals).where(scope).limit(1);
+  if (!proposal) return { status: 'failed' as const, queued: false };
+  if (proposal.status === 'applied' || proposal.status === 'rejected' || proposal.status === 'stale' || proposal.status === 'failed') {
+    return { status: proposal.status, queued: false };
+  }
   const app = await loadApp(db, params.tenantId, params.appId);
   const spec = await loadSpec(db, params.tenantId, params.appId);
   if (!app || !spec) return { status: 'failed' as const, queued: false };
   if (app.currentVersion !== proposal.baseVersion) {
-    await db.update(appChangeProposals).set({ status: 'stale', updatedAt: new Date() }).where(eq(appChangeProposals.id, proposal.id));
+    await db.update(appChangeProposals).set({ status: 'stale', updatedAt: new Date() }).where(scope);
     return { status: 'stale' as const, queued: false };
   }
   const operations = parseOperations(proposal.operations);
-  if (!operations) return { status: 'failed' as const, queued: false };
+  if (!operations) {
+    await markProposalFailed(db, params.tenantId, params.appId, proposal.id, 'La propuesta no se puede aplicar.');
+    return { status: 'failed' as const, queued: false };
+  }
   const dataOps = operations.filter((operation): operation is Extract<AppOperation, { op: 'convertFieldType' | 'splitField' | 'computeField' | 'fillDefault' | 'extractEntity' }> =>
     operation.op === 'convertFieldType' || operation.op === 'splitField' || operation.op === 'computeField' || operation.op === 'fillDefault' || operation.op === 'extractEntity');
   let affected = 0;
@@ -591,21 +640,35 @@ export async function applyProposal(db: Database, params: { tenantId: string; ap
     affected += (await entityRows(db, params.tenantId, params.appId, entityKey)).length;
   }
   if (affected > DATA_ROW_QUEUE_THRESHOLD && proposal.status !== 'processing') {
-    await db.update(appChangeProposals).set({ status: 'processing', updatedAt: new Date() }).where(eq(appChangeProposals.id, proposal.id));
+    const claimed = await claimPendingProposal(db, params);
+    if (!claimed) return { status: 'processing' as const, queued: false };
     return { status: 'processing' as const, queued: true };
   }
-  const next = applySpecOperations(spec, operations);
-  const version = await saveSpecVersion(db, {
-    tenantId: params.tenantId,
-    appId: params.appId,
-    spec: next,
-    source: 'instruction',
-    userId: params.userId,
-    proposalId: proposal.id,
-  });
-  await applyData(db, params.tenantId, params.appId, params.userId, proposal.id, operations);
-  await db.update(appChangeProposals).set({ status: 'applied', appliedVersion: version, updatedAt: new Date() }).where(eq(appChangeProposals.id, proposal.id));
-  return { status: 'applied' as const, queued: false, version };
+  if (proposal.status === 'pending') {
+    const claimed = await claimPendingProposal(db, params);
+    if (!claimed) {
+      const [current] = await db.select({ status: appChangeProposals.status }).from(appChangeProposals).where(scope).limit(1);
+      return { status: (current?.status ?? 'failed') as 'applied' | 'failed' | 'processing' | 'rejected' | 'stale', queued: false };
+    }
+  }
+  try {
+    await applyData(db, params.tenantId, params.appId, params.userId, proposal.id, operations);
+    const next = applySpecOperations(spec, operations);
+    const version = await saveSpecVersion(db, {
+      tenantId: params.tenantId,
+      appId: params.appId,
+      spec: next,
+      source: 'instruction',
+      userId: params.userId,
+      proposalId: proposal.id,
+    });
+    await db.update(appChangeProposals).set({ status: 'applied', appliedVersion: version, updatedAt: new Date() }).where(scope);
+    return { status: 'applied' as const, queued: false, version };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo aplicar.';
+    await markProposalFailed(db, params.tenantId, params.appId, proposal.id, message);
+    return { status: 'failed' as const, queued: false };
+  }
 }
 
 export async function revertProposal(db: Database, params: { tenantId: string; appId: string; proposalId: string }) {

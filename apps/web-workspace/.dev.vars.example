@@ -22,14 +22,16 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 # AI_GATEWAY_ID=your-ai-gateway-id
 
 # 32-byte key, base64. Generate with: openssl rand -base64 32
-# Required. OAuth tokens are not stored unless this key is present.
-TOKEN_ENCRYPTION_KEY=replace-with-openssl-rand-base64-32
+# Optional. OAuth tokens are not stored.
+# TOKEN_ENCRYPTION_KEY=replace-with-openssl-rand-base64-32
 
 # HMAC for email-login hashes. 32 bytes base64. openssl rand -base64 32
 AUTH_HMAC_KEY=replace-with-openssl-rand-base64-32
 
 # inline so `npm run dev` analyzes without the queue consumer.
+# Also logs the email login OTP to the console instead of calling the mail API.
 ANALYSIS_MODE=inline
 
-# Sin el worker de correo (local, o sin plan Workers Paid) el login por email
-# responde con un mensaje y no corta el servidor.
+# Optional. Production posts login codes here. Local with ANALYSIS_MODE=inline skips the HTTP call.
+# EMAIL_SEND_URL=https://send.cfemailer.com/send
+# EMAIL_API_KEY=

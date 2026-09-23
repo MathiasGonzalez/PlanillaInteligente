@@ -5,13 +5,13 @@ Pasos para llevar el repo de un clon limpio a producción y dev en Cloudflare. P
 ## 0. Requisitos
 
 - Node 22+ y npm.
-- Cuenta de Cloudflare. El plan Free alcanza para todo salvo el correo del login por email, que pide Workers Paid.
+- Cuenta de Cloudflare. El plan Free alcanza.
 - Repo en GitHub con Actions habilitado y dos environments: `production` y `development`.
 - Proyecto en Google Cloud para el cliente OAuth.
-- Pulumi CLI **3.255.0**. Las versiones 3.256.0 o más nuevas rompen el state en R2 ([issue 24219](https://github.com/pulumi/pulumi/issues/24219)).
+- Pulumi CLI (última estable).
 
 ```bash
-curl -fsSL https://get.pulumi.com | sh -s -- --version 3.255.0
+curl -fsSL https://get.pulumi.com | sh
 ```
 
 ## 1. Local
@@ -26,7 +26,7 @@ curl -fsSL https://get.pulumi.com | sh -s -- --version 3.255.0
 4. `npm run dev`, en [http://localhost:4321](http://localhost:4321).
 5. Antes de subir código: `npm run test:local`.
 
-En local no hace falta ningún recurso de Cloudflare: D1, KV, R2 y la cola se simulan. El login por email muestra que el correo no está disponible, y Google funciona igual.
+En local no hace falta ningún recurso de Cloudflare: D1, KV, R2 y la cola se simulan. Con `ANALYSIS_MODE=inline` el OTP de login se imprime en la consola.
 
 ## 2. Credenciales
 
@@ -34,7 +34,7 @@ Guardalas en un gestor de contraseñas. En el paso 7 van a GitHub.
 
 | Variable | De dónde sale |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | My Profile → API Tokens. Permiso de edición sobre D1, Workers KV, R2, Queues, Pages y Workers Scripts. Sumá Email Sending y lectura de Zone solo si vas a usar el correo |
+| `CLOUDFLARE_API_TOKEN` | My Profile → API Tokens. Permiso de edición sobre D1, Workers KV, R2, Queues, Pages y Workers Scripts |
 | `CLOUDFLARE_ACCOUNT_ID` | Account ID de la cuenta |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | R2 → Manage API tokens. Token S3 de lectura y escritura. No es el token del API |
 | `PULUMI_CONFIG_PASSPHRASE` | `openssl rand -base64 32`. Si se pierde, el state no se puede leer |
@@ -68,7 +68,7 @@ pulumi up --yes --stack prod
 pulumi up --yes --stack dev
 ```
 
-Cada stack crea D1 y R2 con jurisdicción `eu`, el KV de sesiones, la cola con su DLQ y dos proyectos Pages (workspace y landing). La jurisdicción no se puede cambiar después. Si el `preview` muestra `replace` o `delete` sobre D1, R2 o KV, no sigas.
+Cada stack crea D1 y R2 (sin pin de jurisdicción), el KV de sesiones, la cola con su DLQ y dos proyectos Pages (workspace y landing). Si el `preview` muestra un `replace` o `delete` no esperado sobre D1, R2 o KV, no sigas.
 
 ## 5. Google OAuth y Turnstile
 
@@ -133,8 +133,7 @@ Push a `develop` despliega dev. Push a `main` despliega producción. El workflow
 3. `infra/apply-bindings.mjs`: pega los ids en los `wrangler.jsonc`. No se commitean.
 4. Migraciones de D1.
 5. Deploy del consumer y del cron de mantenimiento.
-6. Deploy del mailer, solo si está configurado. Si falla, el workflow sigue.
-7. Deploy de los proyectos Pages del workspace y la landing.
+6. Deploy de los proyectos Pages del workspace y la landing.
 
 Para verificar: abrí el workspace, entrá con Google, subí un `.xlsx` y esperá a que el análisis salga de «Analizando…».
 
@@ -143,22 +142,11 @@ Para verificar: abrí el workspace, entrá con Google, subí un `.xlsx` y esper�
 - Workers Logs en el proyecto Pages del workspace. Pages no acepta `observability` en `wrangler.jsonc`.
 - Si usás AI Gateway: apagá los logs del gateway y poné su id en `AI_GATEWAY_ID`.
 
-## 10. Correo del login (opcional)
+## 10. Correo del login
 
-Sin este paso el deploy funciona: «Continuar con email» avisa que el correo no está disponible.
+El workspace hace `POST https://send.cfemailer.com/send` con `{ to, kind: "login-code", code, expiresInMinutes }`. La API externa arma el mail. En local (`ANALYSIS_MODE=inline`) el código se imprime en la consola y no hay HTTP.
 
-Requiere Workers Paid y el dominio en Cloudflare DNS.
-
-1. En `infra/Pulumi.prod.yaml` (y en `Pulumi.dev.yaml` con otro subdominio):
-
-   ```yaml
-   planilla-inteligente-infra:emailSendingEnabled: true
-   planilla-inteligente-infra:emailZoneName: tudominio.com
-   planilla-inteligente-infra:emailSendingSubdomain: mail.tudominio.com
-   ```
-
-2. Abrí un PR y revisá el `pulumi preview`. Crea el subdominio de envío con DKIM, SPF y return-path.
-3. Con el merge, CI despliega `workers/api-mailer` con `no-reply@<subdominio>` y conecta el binding `MAILER` al workspace.
+Si la API exige auth: `npx wrangler pages secret put EMAIL_API_KEY --project-name <proyecto-pages>` en prod y en el proyecto dev.
 
 ## Cumplimiento antes de cobrar
 

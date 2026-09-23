@@ -70,9 +70,11 @@ export async function exportAppWorkbook(params: {
     }));
     const matrix = [header, ...body];
     const previous = toMatrix(sheet.usedRange()?.value());
+    const columnsToClear = Math.max(header.length, previous[0]?.length ?? 0);
     sheet.cell(1, 1).value(matrix);
-    for (let rowNumber = matrix.length + 1; rowNumber <= previous.length; rowNumber += 1) {
-      for (let column = 1; column <= Math.max(header.length, previous[0]?.length ?? 0); column += 1) {
+    for (let rowNumber = 1; rowNumber <= Math.max(matrix.length, previous.length); rowNumber += 1) {
+      const startColumn = rowNumber <= matrix.length ? header.length + 1 : 1;
+      for (let column = startColumn; column <= columnsToClear; column += 1) {
         sheet.cell(rowNumber, column).value(null);
       }
     }

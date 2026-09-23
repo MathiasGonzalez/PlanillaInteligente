@@ -2,7 +2,7 @@
 
 SaaS que convierte planillas Excel en aplicaciones web usables.
 
-Hay **dos apps** y **tres Workers**:
+Hay **dos apps** y **dos Workers**:
 
 
 | Deployable          | Carpeta                           | Puerto local | Qué es                                                   |
@@ -11,14 +11,12 @@ Hay **dos apps** y **tres Workers**:
 | Landing             | `apps/web-landing`                | 4322         | Marketing estático, sin bindings                         |
 | Enrichment consumer | `workers/api-enrichment-consumer` | —            | Consume la queue (`analyze` y `apply-proposal`) y la DLQ |
 | Maintenance         | `workers/api-maintenance`         | —            | Cron: baja, sesiones, challenges, historial y propuestas viejas |
-| Mailer              | `workers/api-mailer`              | —            | Código de login. Opcional: sin plan Paid el deploy sigue y el login avisa |
 
 
 ## Scripts (desde la raíz)
 
 - `npm run dev` — workspace (`apps/web-workspace`, puerto 4321)
 - `npm run dev:landing` — landing (`apps/web-landing`, puerto 4322)
-- `npm run dev:mailer` — worker de email, solo si hay Email Sending
 - `npm run test:local` — `npm ci` + typecheck + Astro check + build
 - `npm run build` — build de workspace y landing
 - `npm run db:generate` — genera SQL en `migrations/`
@@ -68,12 +66,13 @@ Las keys de test de Cloudflare siempre pasan; no las uses en producción.
 
 Otras claves, todas en `.dev.vars` en local y `wrangler pages secret put` en prod salvo que se indique:
 
-- `TOKEN_ENCRYPTION_KEY` y `AUTH_HMAC_KEY`: 32 bytes en base64 (`openssl rand -base64 32`). Sin la primera, Google no guarda tokens. Sin la segunda, el login por email responde que el correo no está disponible.
-- `ANALYSIS_MODE`: `inline` en local. `queue` en `wrangler.jsonc` para prod y preview.
+- `TOKEN_ENCRYPTION_KEY` y `AUTH_HMAC_KEY`: 32 bytes en base64 (`openssl rand -base64 32`). Sin la segunda, el login por email responde que el correo no está disponible.
+- `ANALYSIS_MODE`: `inline` en local (también imprime el OTP de login en la consola). `queue` en `wrangler.jsonc` para prod y preview.
 - `WORKERS_AI_MODEL` y `AI_GATEWAY_ID`: públicas, en `vars`. Gateway vacío llama a Workers AI directo. Con id, el código manda `collectLog: false`. Apagá también los logs en el dashboard.
 - `PUBLIC_APP_URL`: env de build de la landing. Local: `http://localhost:4321`.
+- `EMAIL_SEND_URL`: pública, default `https://send.cfemailer.com/send`. `EMAIL_API_KEY`: secret opcional.
 
-El consumer no usa Google ni Turnstile. El de mantenimiento tampoco. El mailer no se despliega si no hay Email Sending.
+El consumer no usa Google ni Turnstile. El de mantenimiento tampoco.
 
 **Observabilidad.** Los Workers declaran `observability` en su `wrangler.jsonc`. Pages no acepta esa clave: en el proyecto Pages del workspace hay que activar Workers Logs desde el dashboard. En el plan Free son 200.000 eventos por día y 3 días de retención.
 
@@ -86,16 +85,16 @@ No hace falta crear D1/KV/R2/Queue en Cloudflare: `astro dev` los simula y persi
 3. Si ya habías migrado el esquema viejo, borrá `apps/web-workspace/.wrangler/state`. Después `npm run db:migrate:local`. Siempre el script de la raíz: sin `--config apps/web-workspace/wrangler.jsonc`, Wrangler escribe otra SQLite y el workspace no la ve.
 4. `npm run dev` → [http://localhost:4321](http://localhost:4321). `npm run dev:landing` → [http://localhost:4322](http://localhost:4322).
 
-Con `ANALYSIS_MODE=inline` el análisis corre en el request. Workers AI es opcional (`npx wrangler login`). Sin AI queda la heurística. Si hay AI, consume cuota. Sin el mailer, «Continuar con email» muestra que el correo no está disponible. Google sigue funcionando.
+Con `ANALYSIS_MODE=inline` el análisis corre en el request y el OTP de login se imprime en la consola. Workers AI es opcional (`npx wrangler login`). Sin AI queda la heurística. Si hay AI, consume cuota. Google sigue funcionando.
 
 ## Aprovisionar Cloudflare (una vez, antes del primer deploy)
 
 El local no necesita esto: `npm run dev` simula los bindings. El deploy de GitHub Actions sí: el workflow asume que el backend de Pulumi y los stacks ya existen.
 
-Pulumi (`infra/`) crea D1, KV, R2, queues y los proyectos Pages. Wrangler corre migraciones y sube el código. El state no está en Pulumi Cloud: vive en un bucket R2. CLI pineada a **3.255.0** (≥ 3.256.0 no escribe ese backend).
+Pulumi (`infra/`) crea D1, KV, R2, queues y los proyectos Pages. Wrangler corre migraciones y sube el código. El state no está en Pulumi Cloud: vive en un bucket R2.
 
 ```bash
-curl -fsSL https://get.pulumi.com | sh -s -- --version 3.255.0
+curl -fsSL https://get.pulumi.com | sh
 ```
 
 ### 1. Generar credenciales
@@ -155,7 +154,7 @@ npx wrangler pages secret put TOKEN_ENCRYPTION_KEY --project-name planilla-intel
 npx wrangler pages secret put AUTH_HMAC_KEY --project-name planilla-inteligente-dev
 ```
 
-Email Sending queda apagado (`emailSendingEnabled` sin setear). Prenderlo pide el plan Workers Paid y no es necesario para desplegar.
+El login por email llama a `https://send.cfemailer.com/send`. Si la API pide auth: `npx wrangler pages secret put EMAIL_API_KEY --project-name <proyecto-pages>`.
 
 Cargar en Google Cloud las redirect URIs de producción y de dev (ver arriba).
 
@@ -191,7 +190,7 @@ El CTA de la landing en CI puede recibir `PUBLIC_APP_URL` apuntando al workspace
 
 Setup desde cero: `PROVISIONING.md`. Convenciones: `AGENTS.md`. Producto: `MVP_PROPOSED.md`. Estado: `MVP_STATUS.md`. Datos: `DATA_SECURITY.md`.
 
-El workspace autentica, guarda el `.xlsx` en R2 y las filas en D1. Con `ANALYSIS_MODE=queue` encola el análisis. El consumer lee R2, escribe la spec y puede llamar a Workers AI. En local el análisis corre en el request. El mailer es aparte y el deploy no lo exige.
+El workspace autentica, guarda el `.xlsx` en R2 y las filas en D1. Con `ANALYSIS_MODE=queue` encola el análisis. El consumer lee R2, escribe la spec y puede llamar a Workers AI. En local el análisis corre en el request. El código de login se envía a `send.cfemailer.com`.
 
 
 

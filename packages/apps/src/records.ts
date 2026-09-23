@@ -2,8 +2,11 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { appSpecVersions, apps, recordChanges, records } from '@planilla/cloudflare/d1/schema';
 import type { ParsedSheet } from '@planilla/spreadsheets/parsing/parse-workbook';
 import type { AppSpec, EntitySpec, FieldSpec } from './spec';
-import { entityOf, parseAppSpec, visibleFields } from './spec';
+import { entityOf, parseAppSpec } from './spec';
+import { restrictedFieldKeys } from './classification';
 import type { Database } from './db';
+
+export { redactRestrictedData } from './classification';
 
 export class RecordValidationError extends Error {
   constructor(message: string) {
@@ -67,8 +70,9 @@ export async function insertImportedRecords(
     createdByUserId: params.userId,
     updatedByUserId: params.userId,
   })));
-  for (let index = 0; index < rows.length; index += 40) {
-    const chunk = rows.slice(index, index + 40);
+  // Each row binds 10 parameters. D1 rejects statements with more than 100.
+  for (let index = 0; index < rows.length; index += 9) {
+    const chunk = rows.slice(index, index + 9);
     if (chunk.length > 0) await db.insert(records).values(chunk);
   }
   return rows.length;
@@ -233,23 +237,65 @@ export interface RecordListQuery {
   sortDirection?: 'asc' | 'desc';
   cursor?: string | null;
   limit?: number;
+  restrictedKeys?: string[];
 }
 
 function encodeCursor(sourceRowIndex: number | null, id: string) {
   return `${sourceRowIndex ?? -1}:${id}`;
 }
 
+function decodeCursor(cursor: string | null | undefined) {
+  if (!cursor) return null;
+  const separator = cursor.indexOf(':');
+  if (separator <= 0) return null;
+  const sourceRowIndex = Number(cursor.slice(0, separator));
+  const id = cursor.slice(separator + 1);
+  if (!id || !Number.isFinite(sourceRowIndex)) return null;
+  return { sourceRowIndex, id };
+}
+
 export async function listRecords(db: Database, query: RecordListQuery) {
-  const limit = Math.min(query.limit ?? 50, 100);
+  const limit = Math.min(query.limit ?? 50, 10_000);
+  const search = query.search?.trim().toLowerCase() ?? '';
+  const hasFilters = (query.filters?.length ?? 0) > 0;
+  const restricted = new Set(query.restrictedKeys ?? []);
+
+  if (!search && !hasFilters && !query.sortField) {
+    const cursor = decodeCursor(query.cursor);
+    const conditions = [
+      eq(records.tenantId, query.tenantId),
+      eq(records.appId, query.appId),
+      eq(records.entityKey, query.entityKey),
+    ];
+    if (cursor) {
+      conditions.push(sql`(coalesce(${records.sourceRowIndex}, -1) > ${cursor.sourceRowIndex} or (coalesce(${records.sourceRowIndex}, -1) = ${cursor.sourceRowIndex} and ${records.id} > ${cursor.id}))`);
+    }
+    const [countRow] = await db.select({ total: sql<number>`count(*)` }).from(records).where(and(
+      eq(records.tenantId, query.tenantId),
+      eq(records.appId, query.appId),
+      eq(records.entityKey, query.entityKey),
+    ));
+    const rows = await db.select().from(records).where(and(...conditions)).orderBy(asc(records.sourceRowIndex), asc(records.id)).limit(limit + 1);
+    const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
+    return {
+      rows: page,
+      nextCursor: rows.length > limit && last ? encodeCursor(last.sourceRowIndex, last.id) : null,
+      total: Number(countRow?.total ?? page.length),
+    };
+  }
+
   const rows = await db.select().from(records).where(and(
     eq(records.tenantId, query.tenantId),
     eq(records.appId, query.appId),
     eq(records.entityKey, query.entityKey),
   )).orderBy(asc(records.sourceRowIndex), asc(records.id));
-  const search = query.search?.trim().toLowerCase() ?? '';
   const filtered = rows.filter((row) => {
     if (search) {
-      const haystack = Object.values(row.data).map((value) => String(value ?? '').toLowerCase()).join(' ');
+      const haystack = Object.entries(row.data)
+        .filter(([key]) => !restricted.has(key))
+        .map(([, value]) => String(value ?? '').toLowerCase())
+        .join(' ');
       if (!haystack.includes(search)) return false;
     }
     for (const filter of query.filters ?? []) {
@@ -330,7 +376,10 @@ export async function resolveRelations(db: Database, tenantId: string, appId: st
       const current = row.data[relation.fieldKey];
       if (typeof current !== 'string' || !current.trim()) continue;
       const match = byPrimary.get(current.trim().toLowerCase()) ?? null;
-      if (!match) unmatched.push(`${source.name}: ${current}`);
+      if (!match) {
+        unmatched.push(`${source.name}: ${current}`);
+        continue;
+      }
       const data = { ...row.data, [relation.fieldKey]: match };
       await db.update(records).set({ data, updatedAt: new Date() }).where(and(eq(records.id, row.id), eq(records.tenantId, tenantId)));
     }
@@ -339,23 +388,17 @@ export async function resolveRelations(db: Database, tenantId: string, appId: st
 }
 
 export async function searchRelationOptions(db: Database, tenantId: string, appId: string, entity: EntitySpec, query: string) {
-  const rows = await listRecords(db, { tenantId, appId, entityKey: entity.key, search: query, limit: 15 });
+  const rows = await listRecords(db, {
+    tenantId,
+    appId,
+    entityKey: entity.key,
+    search: query,
+    limit: 15,
+    restrictedKeys: restrictedFieldKeys(entity.fields),
+  });
   const labelKey = entity.primaryFieldKey;
   return rows.rows.map((row) => ({
     id: row.id,
     label: labelKey ? String(row.data[labelKey] ?? row.id) : row.id,
   }));
-}
-
-export function displayFields(entity: EntitySpec) {
-  return visibleFields(entity);
-}
-
-export async function countRecords(db: Database, tenantId: string, appId: string, entityKey: string) {
-  const [row] = await db.select({ total: sql<number>`count(*)` }).from(records).where(and(
-    eq(records.tenantId, tenantId),
-    eq(records.appId, appId),
-    eq(records.entityKey, entityKey),
-  ));
-  return Number(row?.total ?? 0);
 }

@@ -1,18 +1,16 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { appSpecVersions, apps, records, workbooks } from '@planilla/cloudflare/d1/schema';
-import { resolveAiModel, runAiInference } from '@planilla/cloudflare/ai';
+import { resolveAiModel, runAiInference, extractAiResponse } from '@planilla/cloudflare/ai';
 import { getObject } from '@planilla/cloudflare/r2';
 import { parseWorkbook, type ParsedColumn, type ParsedSheet, type ParsedWorkbook, type RelationCandidate } from '@planilla/spreadsheets/parsing/parse-workbook';
 import type { AppSpec, EntitySpec, FieldSpec, ViewSpec } from './spec';
 import { parseAppSpec } from './spec';
 import type { AiEnv, Database } from './db';
-
-const SENSITIVE = /(password|secret|token|api[_ -]?key|clave|dni|rut|cuit|ssn|card|tarjeta)/i;
-const SPECIAL = /(salud|diagn[oó]st|enfermedad|medic|obra[\s_-]?social|religi[oó]n|religios|iglesia|pol[ií]tic|partido|sindicat|gremio|sexual|orientaci[oó]n[\s_-]?sexual|raza|etnia|[eé]tnico|discapacidad|biom[eé]tr)/i;
+import { isSensitiveName, isSpecialName, isRestrictedName } from './classification';
 
 function fieldFromColumn(column: ParsedColumn): FieldSpec {
-  const sensitive = SENSITIVE.test(column.key) || SENSITIVE.test(column.label);
-  const specialCategory = SPECIAL.test(column.key) || SPECIAL.test(column.label);
+  const sensitive = isSensitiveName(column.key, column.label);
+  const specialCategory = isSpecialName(column.key, column.label);
   return {
     key: column.key,
     label: column.label,
@@ -135,22 +133,8 @@ function columnProfile(sheet: ParsedSheet) {
     type: column.type,
     nonEmpty: column.nonEmpty,
     distinctCount: column.distinctCount,
-    sensitive: SENSITIVE.test(column.label) || SPECIAL.test(column.label),
+    sensitive: isRestrictedName(column.key, column.label),
   }));
-}
-
-function extractPayload(response: unknown): unknown {
-  if (typeof response === 'string') {
-    try {
-      return JSON.parse(response) as unknown;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof response === 'object' && response !== null && 'response' in response) {
-    return extractPayload((response as { response: unknown }).response);
-  }
-  return response;
 }
 
 function normalizeAiSpec(base: AppSpec, candidate: unknown, allowed: RelationCandidate[]): AppSpec {
@@ -225,7 +209,7 @@ export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bu
   if (!app?.workbookId) throw new Error('App not found.');
   const [workbook] = await db.select().from(workbooks).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, tenantId))).limit(1);
   if (!workbook) throw new Error('Workbook not found.');
-  await db.update(workbooks).set({ analysisStatus: 'processing', updatedAt: new Date() }).where(eq(workbooks.id, workbook.id));
+  await db.update(workbooks).set({ analysisStatus: 'processing', updatedAt: new Date() }).where(and(eq(workbooks.id, workbook.id), eq(workbooks.tenantId, tenantId)));
   const file = await getObject(bucket, workbook.r2Key);
   if (!file) throw new Error('Workbook file missing.');
   const parsed = await parseWorkbook(await file.arrayBuffer());
@@ -246,7 +230,7 @@ export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bu
           ? sampleRows.filter((row) => row.entityKey === sheet.entityKey).slice(0, 5).map((row) => {
               const safe: Record<string, unknown> = {};
               for (const column of sheet.columns) {
-                if (SENSITIVE.test(column.label) || SPECIAL.test(column.label)) continue;
+                if (isRestrictedName(column.key, column.label)) continue;
                 safe[column.key] = row.data[column.key] ?? null;
               }
               return safe;
@@ -274,7 +258,7 @@ export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bu
         ],
         response_format: { type: 'json_object' },
       }, env.AI_GATEWAY_ID);
-      const payload = extractPayload(response);
+      const payload = extractAiResponse(response);
       if (payload) {
         spec = normalizeAiSpec(heuristic, payload, parsed.candidates);
         source = 'ai';
@@ -299,7 +283,7 @@ export async function runWorkbookAnalysis(db: Database, env: AiEnv, bucket: R2Bu
     createdByUserId: workbook.uploadedByUserId,
   });
   await db.update(apps).set({ name: spec.title, currentVersion: version, updatedAt: new Date() }).where(and(eq(apps.id, appId), eq(apps.tenantId, tenantId)));
-  await db.update(workbooks).set({ analysisStatus: 'completed', analysisError: null, sheetCount: parsed.sheets.length, updatedAt: new Date() }).where(eq(workbooks.id, workbook.id));
+  await db.update(workbooks).set({ analysisStatus: 'completed', analysisError: null, sheetCount: parsed.sheets.length, updatedAt: new Date() }).where(and(eq(workbooks.id, workbook.id), eq(workbooks.tenantId, tenantId)));
   return spec;
 }
 

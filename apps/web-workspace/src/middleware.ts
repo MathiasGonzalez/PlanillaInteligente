@@ -1,7 +1,7 @@
-import type { AstroCookies } from 'astro';
+import type { APIContext, AstroCookies } from 'astro';
 import { defineMiddleware } from 'astro:middleware';
 import { and, eq, gt } from 'drizzle-orm';
-import { memberships, sessions, users } from '@planilla/cloudflare/d1/schema';
+import { memberships, organizations, sessions, users } from '@planilla/cloudflare/d1/schema';
 import { createDatabase } from '@planilla/cloudflare/d1';
 import { getKvJson, putKvJson } from '@planilla/cloudflare/kv';
 import { cloudflareEnv } from '@planilla/cloudflare/env';
@@ -27,7 +27,6 @@ export interface UserSession {
 export interface SessionCacheEntry {
   tenantId: string;
   userId: string;
-  role: SessionUser['role'];
   sessionId: string;
   expiresAt: string;
 }
@@ -83,6 +82,38 @@ async function loadSessionProfile(
   } satisfies SessionUser;
 }
 
+function isWriteAllowedWhileDeactivated(pathname: string) {
+  return pathname === '/api/account' || pathname === '/api/auth/signout';
+}
+
+async function attachOrganizationState(
+  db: ReturnType<typeof createDatabase>,
+  locals: App.Locals,
+) {
+  if (!locals.tenantId) return;
+  const [organization] = await db
+    .select({ deactivatedAt: organizations.deactivatedAt })
+    .from(organizations)
+    .where(eq(organizations.id, locals.tenantId))
+    .limit(1);
+  locals.orgDeactivated = organization?.deactivatedAt != null;
+}
+
+function rejectDeactivatedWrite(context: APIContext) {
+  const { locals, url, request } = context;
+  if (!locals.orgDeactivated) return null;
+  const method = request.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return null;
+  if (isWriteAllowedWhileDeactivated(url.pathname)) return null;
+  if (url.pathname.startsWith('/api/')) {
+    return new Response(JSON.stringify({ error: 'Workspace dado de baja.' }), {
+      status: 403,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    });
+  }
+  return context.redirect('/');
+}
+
 function clearKnownSessionCookies(cookies: AstroCookies) {
   for (const cookieName of SESSION_COOKIE_NAMES) {
     cookies.delete(cookieName, { path: '/' });
@@ -97,6 +128,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   locals.user = null;
   locals.session = null;
   locals.tenantId = null;
+  locals.orgDeactivated = false;
 
   const sessionToken = getSessionToken(cookies);
 
@@ -134,7 +166,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
         expiresAt: cachedSession.expiresAt,
       };
       locals.tenantId = cachedSession.tenantId;
-      return next();
+      await attachOrganizationState(db, locals);
+      return rejectDeactivatedWrite(context) ?? next();
     }
 
     await deleteSessionByToken(db, cloudflareEnv.SESSION_KV, sessionToken);
@@ -194,7 +227,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const cacheEntry: SessionCacheEntry = {
     tenantId: record.activeOrganizationId,
     userId: record.userId,
-    role: record.role,
     sessionId: record.sessionId,
     expiresAt: record.expiresAt.toISOString(),
   };
@@ -206,5 +238,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
     Math.floor((record.expiresAt.getTime() - Date.now()) / 1000),
   );
 
-  return next();
+  await attachOrganizationState(db, locals);
+  return rejectDeactivatedWrite(context) ?? next();
 });

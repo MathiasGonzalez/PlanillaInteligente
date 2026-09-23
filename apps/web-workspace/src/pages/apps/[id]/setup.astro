@@ -1,6 +1,6 @@
 ---
 import { and, eq } from 'drizzle-orm';
-import { apps, workbooks } from '@planilla/cloudflare/d1/schema';
+import { appSpecVersions, apps, workbooks } from '@planilla/cloudflare/d1/schema';
 import SetupWizard from '../../../components/apps/SetupWizard';
 import WorkspaceLayout from '../../../layouts/WorkspaceLayout.astro';
 
@@ -14,6 +14,14 @@ if (!app) return new Response('Not found', { status: 404 });
 const [workbook] = app.workbookId
   ? await Astro.locals.db.select().from(workbooks).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, tenantId))).limit(1)
   : [];
+const [specVersion] = app.currentVersion > 0
+  ? await Astro.locals.db.select({ source: appSpecVersions.source }).from(appSpecVersions).where(and(
+      eq(appSpecVersions.appId, appId),
+      eq(appSpecVersions.tenantId, tenantId),
+      eq(appSpecVersions.version, app.currentVersion),
+    )).limit(1)
+  : [];
+const fromModel = specVersion?.source === 'ai';
 ---
 <WorkspaceLayout title="Revisar app — PlanillaInteligente">
   <main class="page">
@@ -21,11 +29,22 @@ const [workbook] = app.workbookId
     <section class="card">
       <h1>Revisá la app</h1>
       {workbook && workbook.analysisStatus !== 'completed' ? (
-        <p class="muted">
-          {workbook.analysisStatus === 'failed' ? `No se pudo analizar: ${workbook.analysisError ?? 'error'}` : 'Estamos leyendo las hojas. Recargá en unos segundos.'}
-        </p>
+        workbook.analysisStatus === 'failed' ? (
+          <p class="alert">No se pudo analizar: {workbook.analysisError ?? 'error'}</p>
+        ) : (
+          <div class="analysis" role="status" aria-live="polite">
+            <div class="upload-track" aria-hidden="true"><span></span></div>
+            <p>Estamos leyendo las hojas y consultando el modelo.</p>
+            <script>
+              window.setTimeout(() => window.location.reload(), 4000);
+            </script>
+          </div>
+        )
       ) : (
         <>
+          <p class:list={['origin', fromModel ? 'origin-ai' : 'origin-local']}>
+            {fromModel ? 'El modelo propuso esta estructura.' : 'Esta estructura salió de las columnas, sin modelo.'}
+          </p>
           <p class="muted">Confirmá qué es cada lista, qué columna identifica la fila, si hay un estado y qué columnas ocultar. Sin chat.</p>
           <form method="post" action="/api/ai/sample-consent">
             <input type="hidden" name="appId" value={appId} />
@@ -40,4 +59,43 @@ const [workbook] = app.workbookId
 </WorkspaceLayout>
 <style>
   .page { max-width: 40rem; margin: 0 auto; padding: 1.25rem; display: grid; gap: 1rem; }
+  .analysis { display: grid; gap: 0.7rem; margin-top: 1rem; }
+  .analysis p { margin: 0; font-family: var(--sans); }
+  .upload-track {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .upload-track span {
+    display: block;
+    height: 100%;
+    width: 38%;
+    border-radius: inherit;
+    background: var(--accent);
+  }
+  .origin {
+    display: inline-flex;
+    width: fit-content;
+    margin: 0.9rem 0 0.15rem;
+    border-radius: 999px;
+    padding: 0.28rem 0.7rem;
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    font-weight: 650;
+  }
+  .origin-ai { background: var(--accent-soft); color: var(--accent); }
+  .origin-local { background: var(--line); color: var(--muted); }
+  @media (prefers-reduced-motion: no-preference) {
+    .upload-track span { animation: upload-slide 1.15s ease-in-out infinite; }
+    .origin { animation: origin-in 0.45s ease; }
+  }
+  @keyframes upload-slide {
+    0% { transform: translateX(-130%); }
+    100% { transform: translateX(340%); }
+  }
+  @keyframes origin-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
 </style>

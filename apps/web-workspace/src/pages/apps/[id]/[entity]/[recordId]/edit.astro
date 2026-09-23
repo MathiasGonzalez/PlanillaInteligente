@@ -2,8 +2,8 @@
 import AppFrame from '../../../../../components/apps/AppFrame.astro';
 import RecordForm from '../../../../../components/apps/RecordForm';
 import WorkspaceLayout from '../../../../../layouts/WorkspaceLayout.astro';
-import { displayFields, getRecord, loadSpec } from '@planilla/apps/records';
-import { entityOf } from '@planilla/apps/spec';
+import { getRecord, loadSpec } from '@planilla/apps/records';
+import { entityOf, visibleFields } from '@planilla/apps/spec';
 
 const user = Astro.locals.user;
 const tenantId = Astro.locals.tenantId;
@@ -13,14 +13,15 @@ const spec = await loadSpec(Astro.locals.db, tenantId, appId);
 const entity = spec ? entityOf(spec, entityKey) : null;
 const row = await getRecord(Astro.locals.db, tenantId, appId, recordId);
 if (!spec || !entity || !row) return new Response('Not found', { status: 404 });
-const initial = Object.fromEntries(displayFields(entity).map((field) => [field.key, String(row.data[field.key] ?? '')]));
+const fields = visibleFields(entity);
+const initial = Object.fromEntries(fields.map((field) => [field.key, String(row.data[field.key] ?? '')]));
 ---
 <WorkspaceLayout title={`Editar — ${entity.name}`}>
   <main class="page">
     <AppFrame appId={appId} spec={spec} current={entity.key} owner={user.role === 'owner'} />
     <p><a href={`/apps/${appId}/${entity.key}/${recordId}`}>← Volver a la ficha</a></p>
     <section class="card">
-      <RecordForm client:load appId={appId} entityKey={entity.key} recordId={recordId} fields={displayFields(entity)} initial={initial} />
+      <RecordForm client:load appId={appId} entityKey={entity.key} recordId={recordId} fields={fields} initial={initial} />
     </section>
   </main>
 </WorkspaceLayout>

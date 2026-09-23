@@ -22,7 +22,7 @@ export const POST: APIRoute = async ({ request, locals, cookies, url }) => {
   }
   const emailHash = await hmacHex(key, email);
   const codeHash = await hmacHex(key, `${challenge.id}:${code}`);
-  if (emailHash !== challenge.emailHash || !timingSafeEqual(codeHash, challenge.codeHash)) {
+  if (!timingSafeEqual(emailHash, challenge.emailHash) || !timingSafeEqual(codeHash, challenge.codeHash)) {
     const attempts = challenge.attempts + 1;
     await locals.db.update(emailLoginChallenges).set({
       attempts,

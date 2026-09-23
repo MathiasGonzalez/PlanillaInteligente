@@ -41,19 +41,3 @@ export async function encryptSecret(plaintext: string, encodedKey: string) {
 
   return `${KEY_VERSION}:${bytesToBase64(iv)}:${bytesToBase64(new Uint8Array(ciphertext))}`;
 }
-
-export async function decryptSecret(payload: string, encodedKey: string) {
-  const [version, iv, ciphertext] = payload.split(':');
-  if (version !== KEY_VERSION || !iv || !ciphertext) {
-    throw new Error('Encrypted secret has an unsupported format.');
-  }
-
-  const key = await importKey(encodedKey);
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64ToBytes(iv) },
-    key,
-    base64ToBytes(ciphertext),
-  );
-
-  return new TextDecoder().decode(plaintext);
-}

@@ -11,7 +11,7 @@ export const POST: APIRoute = async ({ locals, params, redirect }) => {
   if (!session || !params.id) return redirect('/login');
   const [app] = await locals.db.select().from(apps).where(and(eq(apps.id, params.id), eq(apps.tenantId, session.tenantId))).limit(1);
   if (!app?.workbookId) return redirect('/');
-  await locals.db.update(workbooks).set({ analysisStatus: 'pending', analysisError: null, updatedAt: new Date() }).where(eq(workbooks.id, app.workbookId));
+  await locals.db.update(workbooks).set({ analysisStatus: 'pending', analysisError: null, updatedAt: new Date() }).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, session.tenantId)));
   await scheduleAppJob(locals.db, cloudflareEnv, {
     kind: 'analyze',
     tenantId: session.tenantId,

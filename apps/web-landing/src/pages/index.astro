@@ -311,6 +311,16 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
         padding: 0 0 2.5rem;
       }
 
+      .cloudflare-notice {
+        margin: 1.25rem 0 0;
+        padding: 1rem 0 0;
+        border-top: 1px solid var(--line);
+        font-family: var(--sans);
+        font-size: 0.75rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
       .disclosure {
         border-top: 1px solid var(--line);
       }
@@ -714,7 +724,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
         </article>
         <article class="step">
           <h2>Tus celdas</h2>
-          <p>Por defecto el modelo no recibe el contenido. Los datos quedan en la Unión Europea.</p>
+          <p>Por defecto el modelo no recibe el contenido. El almacenamiento lo hace Cloudflare, encargado del tratamiento.</p>
         </article>
       </section>
 
@@ -759,9 +769,8 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
           <details class="topic" name="compliance">
             <summary><span class="topic-label">Dónde se guardan los datos</span></summary>
             <p>
-              Tus archivos quedan en la Unión Europea, un destino que Uruguay
-              reconoce como adecuado. No hay un centro de datos en el país: lo que
-              se guarda de forma permanente está en Europa.
+              Los archivos los guarda Cloudflare, encargado del tratamiento. No hay
+              un centro de datos en Uruguay.
             </p>
           </details>
 
@@ -792,6 +801,9 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? 'http://localhost:4321';
           </details>
         </div>
       </details>
+      <p class="cloudflare-notice">
+        Utilizamos Cloudflare, Inc. como proveedor de red y seguridad cibernética. Al interactuar con este sitio, el tráfico es encauzado a través de la red global de Cloudflare para mitigar amenazas y optimizar la velocidad de carga. Cloudflare trata los datos de tráfico e identificación de red bajo estrictos estándares internacionales de confidencialidad y cifrado, garantizando la protección de los datos en conformidad con la Ley N° 18.331 de Protección de Datos Personales de Uruguay.
+      </p>
     </footer>
   </body>
 </html>

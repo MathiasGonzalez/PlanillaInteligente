@@ -27,9 +27,6 @@ const environment = new PlanillaEnvironment("environment", {
   pagesNameSuffix: config.get("pagesNameSuffix") ?? "",
   pagesProductionBranch: config.require("pagesProductionBranch"),
   wranglerTarget,
-  emailZoneName: config.get("emailZoneName"),
-  emailSendingSubdomain: config.get("emailSendingSubdomain"),
-  emailSendingEnabled: config.getBoolean("emailSendingEnabled") ?? false,
 });
 
 export const d1DatabaseId = environment.d1DatabaseId;
@@ -40,6 +37,5 @@ export const queueName = environment.queueName;
 export const dlqName = environment.dlqName;
 export const workspaceProjectName = environment.workspaceProjectName;
 export const landingProjectName = environment.landingProjectName;
-export const emailFromAddress = environment.emailFromAddress;
 export const pagesProductionBranch = environment.pagesProductionBranch;
 export { wranglerTarget };

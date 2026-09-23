@@ -11,7 +11,6 @@
   "scripts": {
     "dev": "npm run dev -w @planilla/web-workspace",
     "dev:landing": "npm run dev -w @planilla/web-landing",
-    "dev:mailer": "npm run dev -w @planilla/api-mailer",
     "build": "npm run build -w @planilla/web-workspace && npm run build -w @planilla/web-landing",
     "check": "npm run check -w @planilla/web-workspace",
     "typecheck": "npm run typecheck -w @planilla/web-workspace && npm run typecheck -w @planilla/web-landing",

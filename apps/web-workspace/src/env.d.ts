@@ -8,10 +8,6 @@ interface QueueBinding<T = unknown> {
   send(message: T): Promise<void>;
 }
 
-interface MailerBinding {
-  sendLoginCode(input: { to: string; code: string; expiresInMinutes: number }): Promise<{ messageId: string | null }>;
-}
-
 declare namespace Cloudflare {
   interface Env {
     DB: D1Database;
@@ -26,10 +22,10 @@ declare namespace Cloudflare {
     TOKEN_ENCRYPTION_KEY?: string;
     AUTH_HMAC_KEY?: string;
     ANALYSIS_MODE?: string;
-    EMAIL_FROM?: string;
+    EMAIL_SEND_URL?: string;
+    EMAIL_API_KEY?: string;
     AI?: WorkersAiBinding;
     ENRICHMENT_QUEUE?: QueueBinding<import('@planilla/apps/jobs').AppJobMessage>;
-    MAILER?: MailerBinding;
   }
 }
 
@@ -56,5 +52,6 @@ declare namespace App {
         }
       | null;
     tenantId: string | null;
+    orgDeactivated: boolean;
   }
 }

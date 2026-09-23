@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import type { FieldSpec } from '@planilla/apps/spec';
 
 interface Props {
@@ -7,6 +7,52 @@ interface Props {
   recordId?: string;
   fields: FieldSpec[];
   initial: Record<string, string>;
+}
+
+interface RelationOption {
+  id: string;
+  label: string;
+}
+
+function RelationPicker({
+  appId,
+  entityKey,
+  value,
+  required,
+  onChange,
+}: {
+  appId: string;
+  entityKey: string;
+  value: string;
+  required: boolean;
+  onChange: (value: string) => void;
+}): JSX.Element {
+  const [query, setQuery] = useState('');
+  const [options, setOptions] = useState<RelationOption[]>([]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const response = await fetch(`/api/apps/${appId}/records?entity=${encodeURIComponent(entityKey)}&options=1&q=${encodeURIComponent(query)}`);
+        const payload = await response.json().catch(() => null) as { options?: RelationOption[] } | null;
+        setOptions(payload?.options ?? []);
+      })();
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [appId, entityKey, query]);
+
+  const selectedMissing = value && !options.some((option) => option.id === value);
+
+  return (
+    <>
+      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar registro" />
+      <select value={value} onChange={(event) => onChange(event.target.value)} required={required}>
+        <option value="">Elegir</option>
+        {selectedMissing ? <option value={value}>{value}</option> : null}
+        {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+      </select>
+    </>
+  );
 }
 
 export default function RecordForm({ appId, entityKey, recordId, fields, initial }: Props): JSX.Element {
@@ -47,8 +93,14 @@ export default function RecordForm({ appId, entityKey, recordId, fields, initial
               <option value="">Elegir</option>
               {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
-          ) : field.type === 'relation' ? (
-            <input value={values[field.key] ?? ''} onChange={(event) => setValues({ ...values, [field.key]: event.target.value })} placeholder="Id del registro relacionado" />
+          ) : field.type === 'relation' && field.relation?.toEntity ? (
+            <RelationPicker
+              appId={appId}
+              entityKey={field.relation.toEntity}
+              value={values[field.key] ?? ''}
+              required={field.required}
+              onChange={(value) => setValues({ ...values, [field.key]: value })}
+            />
           ) : (
             <input
               type={field.type === 'date' ? 'date' : field.type === 'number' || field.type === 'amount' ? 'number' : field.type === 'email' ? 'email' : field.type === 'phone' ? 'tel' : 'text'}

@@ -19,3 +19,17 @@ export async function runAiInference(
     : undefined;
   return ai.run(model, input, options);
 }
+
+export function extractAiResponse(response: unknown): unknown {
+  if (typeof response === 'string') {
+    try {
+      return JSON.parse(response) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof response === 'object' && response !== null && 'response' in response) {
+    return extractAiResponse((response as { response: unknown }).response);
+  }
+  return response;
+}

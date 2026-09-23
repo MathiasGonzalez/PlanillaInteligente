@@ -198,53 +198,6 @@ const wranglerFiles = [
   "workers/api-maintenance/wrangler.jsonc",
 ];
 
-const withMailer = process.argv.includes("--with-mailer");
-
-if (withMailer) {
-  const from = typeof raw.emailFromAddress === "string" ? raw.emailFromAddress : "";
-  if (!from) {
-    console.log("Skipping MAILER binding: emailFromAddress is empty");
-    process.exit(0);
-  }
-  const serviceName = outputs.wranglerTarget === "preview"
-    ? "planilla-inteligente-mailer-preview"
-    : "planilla-inteligente-mailer";
-  const workspacePath = resolve(repoRoot, "apps/web-workspace/wrangler.jsonc");
-  const original = readFileSync(workspacePath, "utf8");
-  const envAt = original.indexOf('\n  "env"');
-  const root = envAt === -1 ? original : original.slice(0, envAt);
-  if (/"binding"\s*:\s*"MAILER"/.test(root)) {
-    console.log("MAILER binding already present");
-    process.exit(0);
-  }
-  const block = `
-  "services": [
-    {
-      "binding": "MAILER",
-      "service": "${serviceName}",
-      "entrypoint": "Mailer"
-    }
-  ],`;
-  const patched = envAt === -1
-    ? `${original.replace(/\s*}\s*$/, "")}${block}\n}\n`
-    : `${original.slice(0, envAt)}\n${block}${original.slice(envAt)}`;
-  writeFileSync(workspacePath, patched);
-  console.log(`Attached MAILER binding to ${serviceName}`);
-  process.exit(0);
-}
-
-if (typeof raw.emailFromAddress === "string" && raw.emailFromAddress !== "") {
-  const mailerPath = resolve(repoRoot, "workers/api-mailer/wrangler.jsonc");
-  const original = readFileSync(mailerPath, "utf8");
-  const patched = original
-    .replaceAll("no-reply@example.com", raw.emailFromAddress);
-  if (patched === original) {
-    throw new Error("emailFromAddress was set but the mailer wrangler was not updated");
-  }
-  writeFileSync(mailerPath, patched);
-  console.log(`Updated workers/api-mailer/wrangler.jsonc (${raw.emailFromAddress})`);
-}
-
 for (const relativePath of wranglerFiles) {
   const absolutePath = resolve(repoRoot, relativePath);
   const original = readFileSync(absolutePath, "utf8");

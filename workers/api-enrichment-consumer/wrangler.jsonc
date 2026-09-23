@@ -32,8 +32,7 @@
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "planilla-inteligente-assets",
-      "jurisdiction": "eu"
+      "bucket_name": "planilla-inteligente-assets"
     }
   ],
 
@@ -80,8 +79,7 @@
       "r2_buckets": [
         {
           "binding": "BUCKET",
-          "bucket_name": "planilla-inteligente-assets-preview",
-          "jurisdiction": "eu"
+          "bucket_name": "planilla-inteligente-assets-preview"
         }
       ],
       "queues": {

@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../../../lib/access';
 import { fail, json } from '../../../../app/http/responses';
-import { createRecord, listRecords, loadSpec, RecordValidationError, searchRelationOptions } from '@planilla/apps/records';
+import { createRecord, listRecords, loadSpec, RecordValidationError, redactRestrictedData, searchRelationOptions } from '@planilla/apps/records';
 import { entityOf } from '@planilla/apps/spec';
 
 export const GET: APIRoute = async ({ locals, params, url }) => {
@@ -27,8 +27,12 @@ export const GET: APIRoute = async ({ locals, params, url }) => {
     sortField: url.searchParams.get('sort'),
     sortDirection: url.searchParams.get('dir') === 'desc' ? 'desc' : 'asc',
     cursor: url.searchParams.get('cursor'),
+    restrictedKeys: entity.fields.filter((field) => field.sensitive || field.specialCategory).map((field) => field.key),
   });
-  return json(page);
+  return json({
+    ...page,
+    rows: page.rows.map((row) => ({ ...row, data: redactRestrictedData(entity.fields, row.data) })),
+  });
 };
 
 export const POST: APIRoute = async ({ locals, params, request }) => {

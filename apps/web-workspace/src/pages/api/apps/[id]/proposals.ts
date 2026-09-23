@@ -24,7 +24,7 @@ export const POST: APIRoute = async ({ locals, params, request }) => {
   if (!instruction) return json({ error: 'Falta la instrucción.' }, 400);
   const [app] = await locals.db.select({ workbookId: apps.workbookId }).from(apps).where(and(eq(apps.id, params.id), eq(apps.tenantId, session.tenantId))).limit(1);
   const [workbook] = app?.workbookId
-    ? await locals.db.select({ sampleConsentAt: workbooks.sampleConsentAt }).from(workbooks).where(eq(workbooks.id, app.workbookId)).limit(1)
+    ? await locals.db.select({ sampleConsentAt: workbooks.sampleConsentAt }).from(workbooks).where(and(eq(workbooks.id, app.workbookId), eq(workbooks.tenantId, session.tenantId))).limit(1)
     : [];
   try {
     const result = await createProposal(locals.db, cloudflareEnv, {

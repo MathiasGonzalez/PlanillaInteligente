@@ -1,5 +1,5 @@
 import { createDatabase } from '@planilla/cloudflare/d1';
-import { isAppJobMessage, runAppJob, type AppJobMessage } from '@planilla/apps/jobs';
+import { isAppJobMessage, markDeadLetterJob, runAppJob, type AppJobMessage } from '@planilla/apps/jobs';
 
 interface QueueMessage<T> {
   body: T;
@@ -18,6 +18,7 @@ function isDeadLetterQueue(queueName: string) {
 
 export default {
   async queue(batch: QueueBatch<AppJobMessage>, env: Cloudflare.Env) {
+    const db = createDatabase(env.DB);
     if (isDeadLetterQueue(batch.queue)) {
       for (const message of batch.messages) {
         const body = message.body;
@@ -26,22 +27,22 @@ export default {
           tenantId: isAppJobMessage(body) ? body.tenantId : null,
           appId: isAppJobMessage(body) ? body.appId : null,
         }));
+        if (isAppJobMessage(body)) await markDeadLetterJob(db, body);
         message.ack();
       }
       return;
     }
-    const db = createDatabase(env.DB);
     for (const message of batch.messages) {
       if (!isAppJobMessage(message.body)) {
         message.ack();
         continue;
       }
-      const result = await runAppJob(db, env, env.BUCKET, message.body);
-      if (result.status === 'failed') {
+      try {
+        await runAppJob(db, env, env.BUCKET, message.body);
+        message.ack();
+      } catch {
         message.retry();
-        continue;
       }
-      message.ack();
     }
   },
 };

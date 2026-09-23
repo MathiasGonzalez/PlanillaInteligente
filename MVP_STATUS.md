@@ -12,9 +12,8 @@ La app se usa con login, dentro del workspace. No hay URL pública ni dominio po
 
 ## Parcial
 
-- La relación en el formulario se carga por id, no con un buscador.
 - Las fórmulas se guardan como campo de solo lectura. No se evalúan.
-- El correo del código de login solo sale si el worker de mail desplegó (plan Workers Paid y `emailSendingEnabled`). Si no, el login muestra el error y el deploy sigue.
+- El código de login se envía a `send.cfemailer.com`. En local (`ANALYSIS_MODE=inline`) se imprime en la consola.
 - En local el análisis corre inline (`ANALYSIS_MODE=inline`). En prod va por la cola. El consumer lee el `.xlsx` en R2.
 
 ## Fuera

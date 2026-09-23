@@ -16,14 +16,14 @@ function randomToken() {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export async function createInvitation(db: Database, params: { tenantId: string; userId: string; role?: 'member' | 'owner' }) {
+export async function createInvitation(db: Database, params: { tenantId: string; userId: string }) {
   const token = randomToken();
   const id = crypto.randomUUID();
   await db.insert(invitations).values({
     id,
     tenantId: params.tenantId,
     tokenHash: await sha256Hex(token),
-    role: params.role ?? 'member',
+    role: 'member',
     createdByUserId: params.userId,
     expiresAt: new Date(Date.now() + INVITE_TTL_MS),
   });

@@ -1,6 +1,6 @@
 import { sendEnrichmentJob } from '@planilla/cloudflare/queue';
 import { markAnalysisFailed, runWorkbookAnalysis } from './generation';
-import { applyProposal } from './evolution';
+import { applyProposal, markProposalFailed } from './evolution';
 import type { AiEnv, Database } from './db';
 
 export interface AppJobMessage {
@@ -47,7 +47,7 @@ export async function runAppJob(db: Database, env: AiEnv, bucket: R2Bucket, mess
       const text = error instanceof Error ? error.message : 'analysis_failed';
       await markAnalysisFailed(db, message.tenantId, message.appId, text);
       console.error(JSON.stringify({ event: 'analysis_failed', tenantId: message.tenantId, appId: message.appId }));
-      return { status: 'failed' as const };
+      return { status: 'ignored' as const };
     }
   }
   const result = await applyProposal(db, {
@@ -56,5 +56,10 @@ export async function runAppJob(db: Database, env: AiEnv, bucket: R2Bucket, mess
     proposalId: message.refId,
     userId: message.requestedByUserId,
   });
-  return { status: result.status === 'applied' ? 'completed' as const : 'failed' as const };
+  return { status: result.status === 'applied' ? 'completed' as const : 'ignored' as const };
+}
+
+export async function markDeadLetterJob(db: Database, message: AppJobMessage) {
+  if (message.kind !== 'apply-proposal') return;
+  await markProposalFailed(db, message.tenantId, message.appId, message.refId, 'dlq');
 }

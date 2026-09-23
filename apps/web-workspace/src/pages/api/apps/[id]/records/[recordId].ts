@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { requireUser } from '../../../../../lib/access';
 import { fail, json } from '../../../../../app/http/responses';
-import { deleteRecord, getRecord, loadSpec, RecordValidationError, updateRecord } from '@planilla/apps/records';
+import { deleteRecord, getRecord, loadSpec, RecordValidationError, redactRestrictedData, updateRecord } from '@planilla/apps/records';
 import { entityOf } from '@planilla/apps/spec';
 
 export const PATCH: APIRoute = async ({ locals, params, request }) => {
@@ -21,7 +21,7 @@ export const PATCH: APIRoute = async ({ locals, params, request }) => {
       userId: session.user.id,
       input: body.data,
     });
-    return json({ data });
+    return json({ data: data ? redactRestrictedData(entity.fields, data) : data });
   } catch (error) {
     if (error instanceof RecordValidationError) return json({ error: error.message }, 400);
     return fail(500);

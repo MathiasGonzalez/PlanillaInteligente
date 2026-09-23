@@ -2,8 +2,8 @@
 import AppFrame from '../../../components/apps/AppFrame.astro';
 import KanbanBoard from '../../../components/apps/KanbanBoard';
 import WorkspaceLayout from '../../../layouts/WorkspaceLayout.astro';
-import { displayFields, listRecords, loadApp, loadSpec } from '@planilla/apps/records';
-import { entityOf } from '@planilla/apps/spec';
+import { listRecords, loadApp, loadSpec } from '@planilla/apps/records';
+import { entityOf, visibleFields } from '@planilla/apps/spec';
 
 const user = Astro.locals.user;
 const tenantId = Astro.locals.tenantId;
@@ -18,17 +18,21 @@ const view = Astro.url.searchParams.get('view') === 'kanban' && entity.statusFie
 const search = Astro.url.searchParams.get('q') ?? '';
 const filterField = Astro.url.searchParams.get('filterField') ?? '';
 const filterValue = Astro.url.searchParams.get('filterValue') ?? '';
+const sortField = Astro.url.searchParams.get('sort');
+const sortDirection = Astro.url.searchParams.get('dir') === 'desc' ? 'desc' : 'asc';
 const page = await listRecords(Astro.locals.db, {
   tenantId,
   appId,
   entityKey,
   search,
   filters: filterField && filterValue ? [{ fieldKey: filterField, op: 'eq', value: filterValue }] : [],
-  sortField: Astro.url.searchParams.get('sort') ?? entity.primaryFieldKey,
-  sortDirection: Astro.url.searchParams.get('dir') === 'desc' ? 'desc' : 'asc',
-  cursor: Astro.url.searchParams.get('cursor'),
+  sortField: view === 'kanban' ? null : sortField,
+  sortDirection,
+  cursor: view === 'kanban' ? null : Astro.url.searchParams.get('cursor'),
+  limit: view === 'kanban' ? 2000 : 50,
+  restrictedKeys: entity.fields.filter((field) => field.sensitive || field.specialCategory).map((field) => field.key),
 });
-const fields = displayFields(entity);
+const fields = visibleFields(entity);
 const filterable = fields.filter((field) => field.type === 'status' || field.type === 'category').slice(0, 2);
 const cards = page.rows.map((row) => ({
   id: row.id,
@@ -43,11 +47,13 @@ const statuses = entity.statusFieldKey ? (entity.fields.find((field) => field.ke
     <section class="card toolbar">
       <form method="get">
         <input type="search" name="q" value={search} placeholder="Buscar" />
-        {filterable.map((field) => (
+        {filterable.length > 0 ? (
           <select name="filterField">
-            <option value={field.key}>{field.label}</option>
+            {filterable.map((field) => (
+              <option value={field.key} selected={field.key === filterField}>{field.label}</option>
+            ))}
           </select>
-        ))}
+        ) : null}
         {filterable[0] ? <input name="filterValue" value={filterValue} placeholder="Filtro" /> : null}
         <button class="button-secondary" type="submit">Filtrar</button>
       </form>
@@ -63,7 +69,10 @@ const statuses = entity.statusFieldKey ? (entity.fields.find((field) => field.ke
         <div class="table-wrap">
           <table>
             <thead>
-              <tr>{fields.map((field) => <th><a href={`?sort=${field.key}&dir=asc`}>{field.label}</a></th>)}</tr>
+              <tr>{fields.map((field) => {
+                const nextDir = sortField === field.key && sortDirection === 'asc' ? 'desc' : 'asc';
+                return <th><a href={`?sort=${field.key}&dir=${nextDir}`}>{field.label}</a></th>;
+              })}</tr>
             </thead>
             <tbody>
               {page.rows.map((row) => (

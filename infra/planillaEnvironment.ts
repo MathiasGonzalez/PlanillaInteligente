@@ -12,12 +12,6 @@ export interface PlanillaEnvironmentArgs {
   pagesProductionBranch: string;
   /** Which wrangler.jsonc block CI should patch: root (`production`) or `env.preview`. */
   wranglerTarget: WranglerTarget;
-  /** Zone already on Cloudflare DNS. Ignored unless emailSendingEnabled is true. */
-  emailZoneName?: string;
-  /** Subdomain onboarded for Email Sending, for example mail.example.com. */
-  emailSendingSubdomain?: string;
-  /** Opt-in. Email Sending needs the Workers Paid plan. Off leaves deploy unchanged. */
-  emailSendingEnabled?: boolean;
 }
 
 function lastPathSegment(id: pulumi.Output<string>): pulumi.Output<string> {
@@ -47,7 +41,6 @@ export class PlanillaEnvironment extends pulumi.ComponentResource {
   public readonly dlqName: pulumi.Output<string>;
   public readonly workspaceProjectName: pulumi.Output<string>;
   public readonly landingProjectName: pulumi.Output<string>;
-  public readonly emailFromAddress: pulumi.Output<string>;
 
   constructor(
     name: string,
@@ -76,8 +69,6 @@ export class PlanillaEnvironment extends pulumi.ComponentResource {
       {
         accountId: args.accountId,
         name: d1Name,
-        // Immutable. Set at creation so personal data stays in the EU (DATA_SECURITY INF-1).
-        jurisdiction: "eu",
       },
       protectOpts,
     );
@@ -96,8 +87,6 @@ export class PlanillaEnvironment extends pulumi.ComponentResource {
       {
         accountId: args.accountId,
         name: r2Name,
-        // Immutable. Set at creation so uploaded files stay in the EU (DATA_SECURITY INF-1).
-        jurisdiction: "eu",
       },
       protectOpts,
     );
@@ -163,27 +152,6 @@ export class PlanillaEnvironment extends pulumi.ComponentResource {
     this.dlqName = dlq.queueName;
     this.workspaceProjectName = workspace.name;
     this.landingProjectName = landing.name;
-    const zoneName = args.emailZoneName?.trim();
-    const sendingName = args.emailSendingSubdomain?.trim();
-    if (args.emailSendingEnabled && zoneName && sendingName) {
-      const zone = cloudflare.getZoneOutput({
-        filter: {
-          name: zoneName,
-          account: { id: args.accountId },
-        },
-      });
-      new cloudflare.EmailSendingSubdomain(
-        "email-sending",
-        {
-          zoneId: zone.id,
-          name: sendingName,
-        },
-        childOpts,
-      );
-      this.emailFromAddress = pulumi.output(`no-reply@${sendingName}`);
-    } else {
-      this.emailFromAddress = pulumi.output("");
-    }
 
     this.registerOutputs({
       wranglerTarget: this.wranglerTarget,
@@ -196,7 +164,6 @@ export class PlanillaEnvironment extends pulumi.ComponentResource {
       dlqName: this.dlqName,
       workspaceProjectName: this.workspaceProjectName,
       landingProjectName: this.landingProjectName,
-      emailFromAddress: this.emailFromAddress,
     });
   }
 }

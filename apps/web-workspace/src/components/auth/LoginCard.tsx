@@ -75,7 +75,7 @@ export function LoginCard({
     input.type = 'hidden';
     input.name = 'cf-turnstile-response';
     input.value = token;
-    event.currentTarget.append(input);
+    event.currentTarget.appendChild(input);
   }
 
   return (

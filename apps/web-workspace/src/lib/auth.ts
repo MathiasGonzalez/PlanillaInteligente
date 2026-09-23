@@ -3,11 +3,9 @@ import { and, eq } from 'drizzle-orm';
 import type { DrizzleD1Database } from 'drizzle-orm/d1';
 import { accounts, memberships, organizations, sessions, users } from '@planilla/cloudflare/d1/schema';
 import type * as schema from '@planilla/cloudflare/d1/schema';
-import { cloudflareEnv } from '@planilla/cloudflare/env';
 import { deleteKv, putKvJson } from '@planilla/cloudflare/kv';
 import type { SessionCacheEntry, SessionUser, UserSession } from '../middleware';
 import { acceptInvitation } from '@planilla/apps/members';
-import { encryptSecret } from './token-cipher';
 
 export const PENDING_INVITE_COOKIE = 'pending_invite';
 export const EMAIL_CHALLENGE_COOKIE = 'email_challenge';
@@ -69,18 +67,6 @@ function cookieOptions(secure: boolean, maxAgeSeconds: number) {
 
 function isSecureRequest(url: URL) {
   return url.hostname !== 'localhost' && url.hostname !== '127.0.0.1' && url.hostname !== '[::1]';
-}
-
-async function encryptedOAuthTokens(profile: GoogleProfile) {
-  const key = cloudflareEnv.TOKEN_ENCRYPTION_KEY?.trim();
-  if (!key) {
-    throw new Error('TOKEN_ENCRYPTION_KEY is not configured.');
-  }
-
-  return {
-    accessToken: await encryptSecret(profile.accessToken, key),
-    refreshToken: profile.refreshToken ? await encryptSecret(profile.refreshToken, key) : null,
-  };
 }
 
 function base64UrlEncode(bytes: Uint8Array) {
@@ -315,46 +301,61 @@ export async function upsertGoogleUser(
   inviteToken: string | null,
 ): Promise<{ user: SessionUser; tenantId: string }> {
   const now = new Date();
-  const resolved = await resolveUserAndTenant(db, profile, inviteToken);
-  const userId = resolved.user.id;
-  const tenantId = resolved.tenantId;
   const [existingAccount] = await db
     .select({ userId: accounts.userId })
     .from(accounts)
     .where(and(eq(accounts.provider, 'google'), eq(accounts.providerAccountId, profile.providerAccountId)))
     .limit(1);
 
-  const tokens = await encryptedOAuthTokens(profile);
-
   if (existingAccount) {
+    const identity = await loadSessionUserFromAccount(db, existingAccount.userId, inviteToken);
     await db
       .update(accounts)
       .set({
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
         tokenType: profile.tokenType,
         scope: profile.scope,
         expiresAt: profile.expiresAt,
-        tenantId,
+        tenantId: identity.tenantId,
         updatedAt: now,
+        accessToken: null,
+        refreshToken: null,
       })
       .where(and(eq(accounts.provider, 'google'), eq(accounts.providerAccountId, profile.providerAccountId)));
-  } else {
-    await db.insert(accounts).values({
-      id: crypto.randomUUID(),
-      userId,
-      tenantId,
-      provider: 'google',
-      providerAccountId: profile.providerAccountId,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      tokenType: profile.tokenType,
-      scope: profile.scope,
-      expiresAt: profile.expiresAt,
-    });
+    return identity;
   }
 
+  const resolved = await resolveUserAndTenant(db, profile, inviteToken);
+  await db.insert(accounts).values({
+    id: crypto.randomUUID(),
+    userId: resolved.user.id,
+    tenantId: resolved.tenantId,
+    provider: 'google',
+    providerAccountId: profile.providerAccountId,
+    accessToken: null,
+    refreshToken: null,
+    tokenType: profile.tokenType,
+    scope: profile.scope,
+    expiresAt: profile.expiresAt,
+  });
   return resolved;
+}
+
+async function loadSessionUserFromAccount(db: AppDatabase, userId: string, inviteToken: string | null) {
+  if (inviteToken) {
+    const accepted = await acceptInvitation(db, { token: inviteToken, userId });
+    if (accepted) {
+      return { user: await loadSessionUser(db, userId, accepted.tenantId), tenantId: accepted.tenantId };
+    }
+  }
+  const [membership] = await db
+    .select({ organizationId: memberships.organizationId })
+    .from(memberships)
+    .where(eq(memberships.userId, userId))
+    .limit(1);
+  const [user] = await db.select({ defaultOrganizationId: users.defaultOrganizationId }).from(users).where(eq(users.id, userId)).limit(1);
+  const tenantId = user?.defaultOrganizationId ?? membership?.organizationId;
+  if (!tenantId) throw new Error('Failed to load authenticated user.');
+  return { user: await loadSessionUser(db, userId, tenantId), tenantId };
 }
 
 export async function createUserSession(
@@ -388,7 +389,6 @@ export async function createUserSession(
   const cacheEntry: SessionCacheEntry = {
     tenantId,
     userId: user.id,
-    role: user.role,
     sessionId: session.id,
     expiresAt: session.expiresAt,
   };
@@ -419,4 +419,24 @@ export async function destroyUserSession(
     deleteKv(kv, `session:${sessionToken}`),
     db.delete(sessions).where(eq(sessions.sessionToken, sessionToken)),
   ]);
+}
+
+export async function switchActiveOrganization(
+  db: AppDatabase,
+  kv: KVNamespace | undefined,
+  session: UserSession,
+  user: SessionUser,
+  tenantId: string,
+) {
+  await db.update(sessions).set({
+    activeOrganizationId: tenantId,
+    updatedAt: new Date(),
+  }).where(eq(sessions.sessionToken, session.sessionToken));
+  const ttl = Math.max(1, Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000));
+  await putKvJson(kv, `session:${session.sessionToken}`, {
+    tenantId,
+    userId: user.id,
+    sessionId: session.id,
+    expiresAt: session.expiresAt,
+  }, ttl);
 }
